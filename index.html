@@ -101,6 +101,12 @@
     .card p { margin: 0; color: var(--muted); font-size: 0.97rem; }
 
     /* People */
+    .people-group {
+      font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--accent); font-weight: 700; margin: 40px 0 22px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--line);
+    }
+    .people-group:first-of-type { margin-top: 8px; }
     .people { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 22px; }
     .person { text-align: center; }
     .avatar {
@@ -110,6 +116,24 @@
     }
     .person h3 { margin: 0 0 2px; font-size: 1.05rem; }
     .person p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+    .person p.detail { font-size: 0.82rem; margin-top: 3px; opacity: 0.85; }
+
+    /* PI feature block */
+    .pi-feature {
+      display: flex; gap: 28px; align-items: flex-start;
+      background: var(--soft); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 30px; margin-bottom: 8px;
+    }
+    .pi-avatar {
+      flex: 0 0 auto; width: 104px; height: 104px; border-radius: 18px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      display: grid; place-items: center; color: #fff; font-size: 1.9rem; font-weight: 700;
+    }
+    .pi-bio h3 { margin: 0 0 2px; font-size: 1.35rem; }
+    .pi-bio .pi-role { color: var(--primary); font-weight: 600; margin: 0 0 14px; font-size: 0.98rem; }
+    .pi-bio p { margin: 0 0 12px; color: var(--muted); font-size: 0.98rem; }
+    .pi-bio p:last-child { margin-bottom: 0; }
+    @media (max-width: 640px) { .pi-feature { flex-direction: column; align-items: center; text-align: center; } }
 
     /* Publications */
     .pubs { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
@@ -231,28 +255,65 @@
         <div class="section-head">
           <span class="kicker">People</span>
           <h2>Our team</h2>
-          <p>The researchers and collaborators behind the IDEAS Lab. <span class="note">Replace these placeholders with real team members.</span></p>
+          <p>The researchers and collaborators behind the IDEAS Lab.</p>
         </div>
+
+        <h3 class="people-group">Principal Investigator</h3>
+        <div class="pi-feature">
+          <div class="pi-avatar">WL</div>
+          <div class="pi-bio">
+            <h3>William Lewis, MD</h3>
+            <p class="pi-role">Principal Investigator · Beth Israel Deaconess Medical Center</p>
+            <p>William Lewis is an Instructor in Dermatology at Harvard Medical School and Beth Israel Deaconess Medical Center, where he directs the IDEAS Lab. His work bridges biomedical optics, device and software development, and clinical dermatology, with a focus on low-cost, accessible imaging tools for skin.</p>
+            <p>He earned his BA <em>summa cum laude</em> from Boston University and his MD from Harvard Medical School, where his research at the Wellman Center for Photomedicine spanned photodynamic and laser therapy and the optical imaging of skin and vascular tissue. He completed internal medicine training at UCLA and dermatology residency at the University of Pennsylvania — both in global-health pathways that included clinical work in Malawi and Guatemala. Since returning to Boston in 2024, he has built a program developing smartphone-based imaging of erythema in skin of color, micro-fractional cryotherapy, and new approaches to clinical skin microscopy — work recognized by the Skin of Color Society. He also serves as Director of Medical Student Research in Dermatology at BIDMC.</p>
+          </div>
+        </div>
+
+        <h3 class="people-group">Current Team</h3>
         <div class="people">
           <div class="person">
-            <div class="avatar">PI</div>
-            <h3>[Principal Investigator]</h3>
-            <p>Director, IDEAS Lab</p>
+            <div class="avatar">DC</div>
+            <h3>Daniel Cubillos Rojas-Alejandro, MD</h3>
+            <p>Research Fellow · 2026–2027</p>
+            <p class="detail">Imaging &amp; image processing · Bogotá, Colombia (prev. Purdue)</p>
           </div>
           <div class="person">
-            <div class="avatar">R1</div>
-            <h3>[Researcher Name]</h3>
-            <p>Research Scientist</p>
+            <div class="avatar">JC</div>
+            <h3>Janelle Clovie</h3>
+            <p>Medical Student</p>
+            <p class="detail">Boston University School of Medicine</p>
           </div>
           <div class="person">
-            <div class="avatar">G1</div>
-            <h3>[Student Name]</h3>
-            <p>Graduate Researcher</p>
+            <div class="avatar">AS</div>
+            <h3>Amr Seifelnasr</h3>
+            <p>Researcher · UMass Lowell</p>
+            <p class="detail">Fractional cryotherapy modeling</p>
+          </div>
+        </div>
+
+        <h3 class="people-group">Collaborators</h3>
+        <div class="people">
+          <div class="person">
+            <div class="avatar">WF</div>
+            <h3>Walfre Franco, PhD</h3>
+            <p>Collaborator</p>
+            <p class="detail">Chair, Biomedical Engineering · Francis College of Engineering, UMass Lowell</p>
+          </div>
+        </div>
+
+        <h3 class="people-group">Alumni</h3>
+        <div class="people">
+          <div class="person">
+            <div class="avatar">DD</div>
+            <h3>Dalton Driscoll</h3>
+            <p>Alumnus</p>
+            <p class="detail">PhD student, Biomedical Engineering · UMass Lowell</p>
           </div>
           <div class="person">
-            <div class="avatar">+</div>
-            <h3>Join us</h3>
-            <p>Open positions &amp; collaborations</p>
+            <div class="avatar">LS</div>
+            <h3>Luxanna Sands</h3>
+            <p>Alumna</p>
+            <p class="detail">NSF REU Summer Researcher · UMass Lowell</p>
           </div>
         </div>
       </div>
@@ -264,20 +325,16 @@
         <div class="section-head">
           <span class="kicker">Publications</span>
           <h2>Selected work</h2>
-          <p>Recent papers and projects. <span class="note">Swap in your real citations and links.</span></p>
+          <p>Selected publications from the lab and its collaborators.</p>
         </div>
         <ul class="pubs">
           <li>
-            <div class="ptitle">[Paper title — e.g. Melanin-invariant quantification of erythema]</div>
-            <div class="pmeta">Authors · Journal/Venue · Year · <a href="#">link</a></div>
+            <div class="ptitle">Smartphone Imaging of Subcutaneous Veins</div>
+            <div class="pmeta"><strong>Lewis W</strong>, Franco W · <em>Lasers in Surgery and Medicine</em> · 2018 · <a href="https://doi.org/10.1002/lsm.22949">doi:10.1002/lsm.22949</a></div>
           </li>
           <li>
-            <div class="ptitle">[Paper title — e.g. Vein visualization using spectral imaging and adaptive contrast enhancement]</div>
-            <div class="pmeta">Authors · Journal/Venue · Year · <a href="#">link</a></div>
-          </li>
-          <li>
-            <div class="ptitle">[Paper title — e.g. Imaging-based assessment of sunscreen coverage]</div>
-            <div class="pmeta">Authors · Journal/Venue · Year · <a href="#">link</a></div>
+            <div class="ptitle">RGB Skin Erythema Imaging</div>
+            <div class="pmeta">Driscoll D, Franco W, <strong>Lewis WF</strong> · <em>Proc. SPIE 13823, Photonics in Dermatology and Plastic Surgery 2026</em> · 1382303 (2026) · <a href="https://spie.org/photonics-west/presentation/RGB-skin-erythema-imaging/13823-6">SPIE</a></div>
           </li>
         </ul>
       </div>
@@ -293,10 +350,10 @@
         </div>
         <div class="contact-box">
           <div class="info">
-            <p><strong>Email:</strong> <a href="mailto:your.email@institution.edu">your.email@institution.edu</a> <span class="note">add lab email</span></p>
-            <p><strong>Location:</strong> [Department, Institution, City] <span class="note">add address</span></p>
+            <p><strong>Email:</strong> <a href="mailto:wlewis2@bidmc.harvard.edu">wlewis2@bidmc.harvard.edu</a></p>
+            <p><strong>Location:</strong> Department of Dermatology, Beth Israel Deaconess Medical Center · Boston, MA</p>
           </div>
-          <a class="btn btn-primary" href="mailto:your.email@institution.edu" style="background: var(--primary); color: #fff;">Email the lab</a>
+          <a class="btn btn-primary" href="mailto:wlewis2@bidmc.harvard.edu" style="background: var(--primary); color: #fff;">Email the lab</a>
         </div>
       </div>
     </section>
