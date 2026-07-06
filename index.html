@@ -150,6 +150,18 @@
     .figure img { width: 100%; height: 210px; object-fit: contain; background: #fbfdfd; display: block; border-bottom: 1px solid var(--line); }
     .figure figcaption { padding: 16px 18px; color: var(--muted); font-size: 0.9rem; }
     .figure figcaption strong { display: block; color: var(--ink); font-size: 0.98rem; margin-bottom: 4px; }
+    .figure-feature { margin: 0 auto 8px; max-width: 460px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+    .figure-feature img { width: 100%; height: auto; display: block; border-bottom: 1px solid var(--line); }
+    .figure-feature figcaption { padding: 16px 18px; color: var(--muted); font-size: 0.9rem; }
+    .figure-feature figcaption strong { display: block; color: var(--ink); font-size: 0.98rem; margin-bottom: 4px; }
+
+    /* News */
+    .news { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+    .news li { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: flex; gap: 18px; align-items: flex-start; }
+    .news-tag { flex: 0 0 auto; background: var(--soft); color: var(--primary); font-weight: 600; font-size: 0.78rem; padding: 5px 11px; border-radius: 999px; white-space: nowrap; }
+    .news li p { margin: 0; color: var(--muted); }
+    .news li strong { color: var(--ink); }
+    @media (max-width: 560px) { .news li { flex-direction: column; gap: 10px; } .news-tag { white-space: normal; } }
 
     /* Publications */
     .pubs { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
@@ -188,6 +200,7 @@
         <a href="#about">About</a>
         <a href="#research">Research</a>
         <a href="#people">People</a>
+        <a href="#news">News</a>
         <a href="#publications">Publications</a>
         <a href="#contact">Contact</a>
       </nav>
@@ -261,10 +274,14 @@
         </div>
 
         <h3 class="subhead">Active Areas of Research</h3>
+        <figure class="figure-feature">
+          <img src="assets/erythema.jpg" alt="Clinical photo of erythema in pigmented skin beside its computed erythema map" />
+          <figcaption><strong>Erythema imaging in skin of color</strong>A clinical photo (top) and its computed erythema map (bottom), making inflammation visible and measurable even in heavily pigmented skin.</figcaption>
+        </figure>
         <div class="gallery">
           <figure class="figure">
             <img src="assets/melanin-axis.png" alt="RGB color-space model separating erythema from pigmentation" />
-            <figcaption><strong>Erythema imaging in skin of color</strong>Developing color-space and computational-imaging methods that separate redness from melanin, so inflammation can be seen and measured across every skin tone.</figcaption>
+            <figcaption><strong>Separating erythema from pigment</strong>A color-space model that isolates redness from melanin, the foundation for measuring erythema across every skin tone.</figcaption>
           </figure>
           <figure class="figure">
             <img src="assets/cryo-device.jpg" alt="Engineered template for fractional cryotherapy" />
@@ -301,7 +318,7 @@
         <h3 class="people-group">Current Team</h3>
         <div class="people">
           <div class="person">
-            <div class="avatar">DC</div>
+            <div class="avatar"><img src="assets/daniel.jpg" alt="Daniel Cubillos Rojas-Alejandro" /></div>
             <h3>Daniel Cubillos Rojas-Alejandro, MD</h3>
             <p>Research Fellow · 2026–2027</p>
             <p class="detail">Imaging &amp; image processing · Bogotá, Colombia (prev. Purdue)</p>
@@ -360,8 +377,33 @@
       </div>
     </section>
 
+    <!-- NEWS -->
+    <section id="news" class="alt">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="kicker">News</span>
+          <h2>What's happening</h2>
+          <p>Recent recognition, presentations, and milestones from the lab.</p>
+        </div>
+        <ul class="news">
+          <li>
+            <span class="news-tag">SPIE Photonics West 2026</span>
+            <p>Congratulations to <strong>Dalton Driscoll</strong> on acceptance to present <em>"Smartphone Skin Erythema Imaging"</em> at SPIE Photonics West 2026!</p>
+          </li>
+          <li>
+            <span class="news-tag">BMES 2025</span>
+            <p>Congratulations to <strong>Luxanna Sands</strong> on presenting <em>"Development of a Fractional Cryotherapy Device for Actinic Field Cancerization"</em> at BMES 2025!</p>
+          </li>
+          <li>
+            <span class="news-tag">Best Presentation · 2025</span>
+            <p>Congratulations to <strong>Dalton Driscoll</strong> on winning Best Presentation at the Francis College of Engineering 2025 Student Research and Community Engagement Symposium!</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
     <!-- PUBLICATIONS -->
-    <section id="publications" class="alt">
+    <section id="publications">
       <div class="wrap">
         <div class="section-head">
           <span class="kicker">Publications</span>
@@ -386,7 +428,7 @@
     </section>
 
     <!-- CONTACT -->
-    <section id="contact">
+    <section id="contact" class="alt">
       <div class="wrap">
         <div class="section-head">
           <span class="kicker">Contact</span>
