@@ -141,7 +141,8 @@
       font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.12em;
       color: var(--accent); font-weight: 700; margin: 48px 0 4px;
     }
-    .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; margin-top: 18px; }
+    .gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; margin-top: 18px; }
+    @media (max-width: 640px) { .gallery { grid-template-columns: 1fr; } }
     .figure {
       margin: 0; background: #fff; border: 1px solid var(--line);
       border-radius: var(--radius); overflow: hidden; transition: box-shadow 0.2s, transform 0.2s;
@@ -150,10 +151,6 @@
     .figure img { width: 100%; height: 210px; object-fit: contain; background: #fbfdfd; display: block; border-bottom: 1px solid var(--line); }
     .figure figcaption { padding: 16px 18px; color: var(--muted); font-size: 0.9rem; }
     .figure figcaption strong { display: block; color: var(--ink); font-size: 0.98rem; margin-bottom: 4px; }
-    .figure-feature { margin: 0 auto 8px; max-width: 460px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-    .figure-feature img { width: 100%; height: auto; display: block; border-bottom: 1px solid var(--line); }
-    .figure-feature figcaption { padding: 16px 18px; color: var(--muted); font-size: 0.9rem; }
-    .figure-feature figcaption strong { display: block; color: var(--ink); font-size: 0.98rem; margin-bottom: 4px; }
 
     /* News */
     .news { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
@@ -274,11 +271,11 @@
         </div>
 
         <h3 class="subhead">Active Areas of Research</h3>
-        <figure class="figure-feature">
-          <img src="assets/erythema.jpg" alt="Clinical photo of erythema in pigmented skin beside its computed erythema map" />
-          <figcaption><strong>Erythema imaging in skin of color</strong>A clinical photo (top) and its computed erythema map (bottom), making inflammation visible and measurable even in heavily pigmented skin.</figcaption>
-        </figure>
         <div class="gallery">
+          <figure class="figure">
+            <img src="assets/erythema.jpg" alt="Clinical photo of erythema in pigmented skin beside its computed erythema map" />
+            <figcaption><strong>Erythema imaging in skin of color</strong>A clinical photo (top) and its computed erythema map (bottom), making inflammation visible and measurable even in heavily pigmented skin.</figcaption>
+          </figure>
           <figure class="figure">
             <img src="assets/melanin-axis.png" alt="RGB color-space model separating erythema from pigmentation" />
             <figcaption><strong>Separating erythema from pigment</strong>A color-space model that isolates redness from melanin, the foundation for measuring erythema across every skin tone.</figcaption>
