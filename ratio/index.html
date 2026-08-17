@@ -41,7 +41,6 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 
 .notice{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;
   background:rgba(10,12,16,.82)}
-.notice[hidden]{display:none}
 .notice .card{max-width:340px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px 20px;text-align:center}
 .notice h1{font-size:19px;margin:0 0 6px;font-weight:600;text-wrap:balance}
 .notice p{margin:0 0 16px;color:var(--muted);font-size:14px;line-height:1.45}
@@ -53,6 +52,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .row{display:flex;align-items:center;gap:10px}
 .row.primary{justify-content:space-between}
 .row.secondary{justify-content:space-between}
+.row .group{display:flex;align-items:center;gap:8px}
 
 .btn{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;
   font-size:14px;font-weight:500;min-height:42px;min-width:64px}
@@ -69,22 +69,15 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .seg button{background:transparent;border:0;border-radius:9px;padding:7px 12px;font-size:13px;font-weight:500;color:var(--muted);min-height:32px}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 
-.panel{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line);padding-top:12px;max-height:46vh;overflow-y:auto}
-.panel[hidden]{display:none}
+.panel{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line);padding-top:12px}
 .ctl{display:flex;flex-direction:column;gap:6px}
 .ctl .head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .ctl label,.ctl .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .ctl .val{font-family:var(--font-mono);font-size:12px;color:var(--text);font-variant-numeric:tabular-nums}
 .ctl input[type=range]{width:100%;accent-color:var(--accent);margin:0}
-.ctl .inline{display:flex;align-items:center;gap:10px}
-.ctl .inline input[type=range]{flex:1}
-.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-#hist{display:block;width:100%;height:44px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px}
-.hint{font-size:12px;color:var(--muted);line-height:1.4;margin:0}
 .small{font-size:12px;padding:6px 10px;min-height:30px;min-width:0}
 
 .preview{position:fixed;inset:0;background:rgba(10,12,16,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;z-index:10}
-.preview[hidden]{display:none}
 .preview .imgs{display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow:auto;width:100%;align-items:center}
 .preview img{max-width:100%;max-height:60vh;border-radius:8px;border:1px solid var(--line)}
 .preview p{margin:0;color:var(--muted);font-size:13px;text-align:center}
@@ -99,14 +92,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
     <div class="hud">
       <div>
         <div class="name">Ratio Viewfinder</div>
-        <div class="formula">(G−B)/(R−G) → gray</div>
+        <div class="formula">(G−B)/(R−G) → equalized gray</div>
       </div>
       <div class="stats" id="stats">—</div>
     </div>
     <div class="notice" id="notice">
       <div class="card">
         <h1>Live (G−B)/(R−G) view</h1>
-        <p id="noticeText">Uses the rear camera. Each pixel is mapped to grayscale by its (G−B)/(R−G) ratio; pixels where R−G is at or below the floor are shown black.</p>
+        <p id="noticeText">Uses the rear camera. Each frame's (G−B)/(R−G) ratio image is histogram-equalized to grayscale; pixels with R−G ≤ 0 (ratio undefined) are shown black.</p>
         <p><button class="btn primary" id="startBtn">Start camera</button></p>
       </div>
     </div>
@@ -115,11 +108,13 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
   <div class="dock">
     <div class="row secondary">
       <div class="seg" id="viewSeg" role="group" aria-label="View">
-        <button data-view="ratio" aria-pressed="true">Ratio</button>
-        <button data-view="split" aria-pressed="false">Split</button>
-        <button data-view="rgb" aria-pressed="false">RGB</button>
+        <button data-view="processed" aria-pressed="true">Processed</button>
+        <button data-view="normal" aria-pressed="false">Normal</button>
       </div>
-      <button class="btn" id="adjustBtn" aria-pressed="false" aria-controls="panel">Adjust</button>
+      <div class="group">
+        <button class="btn" id="invertBtn" aria-pressed="false">Invert</button>
+        <button class="btn" id="adjustBtn" aria-pressed="false" aria-controls="panel" hidden>Adjust</button>
+      </div>
     </div>
 
     <div class="row primary">
@@ -129,65 +124,9 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
     </div>
 
     <div class="panel" id="panel" hidden>
-      <div class="ctl">
-        <div class="head">
-          <span class="lbl">Gray scaling</span>
-          <div class="seg" id="scaleSeg">
-            <button data-scale="auto" aria-pressed="true">Auto</button>
-            <button data-scale="manual" aria-pressed="false">Manual</button>
-          </div>
-        </div>
-        <canvas id="hist" width="320" height="44"></canvas>
-        <p class="hint" id="scaleHint">Auto stretches between the low and high percentiles of valid pixels each frame.</p>
+      <div class="ctl" id="torchCtl" hidden>
+        <div class="head"><span class="lbl">Light</span><button class="btn small" id="torchBtn" aria-pressed="false">Torch</button></div>
       </div>
-
-      <div class="ctl" id="clipCtl">
-        <div class="head"><label for="clip">Percentile clip</label><span class="val" id="clipVal">1% – 99%</span></div>
-        <div class="inline">
-          <input type="range" id="clip" min="0" max="10" step="0.5" value="1">
-          <button class="btn small" id="lockBtn" title="Copy the current auto range into manual">Lock range</button>
-        </div>
-      </div>
-
-      <div class="ctl" id="manualCtl" hidden>
-        <div class="pair">
-          <div class="ctl">
-            <div class="head"><label for="lo">Black at</label><span class="val" id="loVal">−0.50</span></div>
-            <input type="range" id="lo" min="-3" max="4" step="0.01" value="-0.5">
-          </div>
-          <div class="ctl">
-            <div class="head"><label for="hi">White at</label><span class="val" id="hiVal">1.50</span></div>
-            <input type="range" id="hi" min="-3" max="4" step="0.01" value="1.5">
-          </div>
-        </div>
-      </div>
-
-      <div class="ctl">
-        <div class="head"><label for="floor">R−G floor (invalid below)</label><span class="val" id="floorVal">4</span></div>
-        <input type="range" id="floor" min="1" max="40" step="1" value="4">
-      </div>
-
-      <div class="ctl">
-        <div class="head">
-          <span class="lbl">Processing size</span>
-          <div class="seg" id="resSeg">
-            <button data-res="1" aria-pressed="true">Full</button>
-            <button data-res="0.5" aria-pressed="false">Half</button>
-            <button data-res="0.25" aria-pressed="false">Quarter</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="ctl">
-        <div class="head">
-          <span class="lbl">Output</span>
-          <div class="row">
-            <button class="btn small" id="invertBtn" aria-pressed="false">Invert</button>
-            <button class="btn small" id="torchBtn" aria-pressed="false" hidden>Torch</button>
-          </div>
-        </div>
-      </div>
-
       <div class="ctl" id="zoomCtl" hidden>
         <div class="head"><label for="zoom">Zoom</label><span class="val" id="zoomVal">1.0×</span></div>
         <input type="range" id="zoom" min="1" max="1" step="0.1" value="1">
@@ -208,21 +147,20 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 const $ = s => document.querySelector(s);
 const video = $('#src'), view = $('#view'), vctx = view.getContext('2d');
 const work = document.createElement('canvas'), wctx = work.getContext('2d', {willReadFrequently:true});
-const histC = $('#hist'), hctx = histC.getContext('2d');
-const NB = 256, hist = new Uint32Array(NB);
+const NC = 512, NF = 16384;                // coarse / fine histogram bins
+const coarse = new Uint32Array(NC), fine = new Uint32Array(NF), lut = new Float32Array(NF);
 let ratio = new Float32Array(0);
 let raf = 0, needsRender = false;
 
 const st = {
-  stream:null, track:null, facing:'environment', running:false, frozen:false,
-  view:'ratio', scaleMode:'auto', clip:1, lo:-0.5, hi:1.5, autoLo:NaN, autoHi:NaN,
-  hmin:-1, hmax:2, invalidPct:0, invert:false, res:1, floor:4,
+  stream:null, track:null, facing:'environment', mirror:false, running:false, frozen:false,
+  view:'processed', invert:false, invalidPct:0,
+  fmin:NaN, fmax:NaN, lutReady:false,      // smoothed equalization range + LUT state
   frames:0, fpsT:0, fps:0
 };
 
 /* ---------- camera ---------- */
 async function start(){
-  const noticeText = $('#noticeText');
   if(!window.isSecureContext){ fail('This page must be served over HTTPS (or localhost) for the camera to work.'); return; }
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ fail('This browser does not expose the camera API.'); return; }
   stopStream();
@@ -240,11 +178,14 @@ async function start(){
   video.srcObject = st.stream;
   try{ await video.play(); }catch(e){}
   st.track = st.stream.getVideoTracks()[0];
+  const settings = (st.track.getSettings && st.track.getSettings()) || {};
+  const facing = settings.facingMode || st.facing;
+  st.mirror = facing === 'user';           // mirror the selfie camera like the native Camera app
   setupTrackControls();
   $('#notice').hidden = true;
   $('#flipBtn').disabled = $('#saveBtn').disabled = $('#freezeBtn').disabled = false;
-  st.running = true; st.frozen = false; $('#freezeBtn').textContent = 'Freeze';
-  st.autoLo = st.autoHi = NaN;
+  st.running = true; st.frozen = false; $('#freezeBtn').textContent = 'Freeze'; $('#freezeBtn').setAttribute('aria-pressed','false');
+  resetEq();
   requestWakeLock();
   cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
 }
@@ -257,14 +198,19 @@ function stopStream(){
 }
 function setupTrackControls(){
   const caps = (st.track && st.track.getCapabilities) ? st.track.getCapabilities() : {};
-  const torchBtn = $('#torchBtn');
-  torchBtn.hidden = !caps.torch; torchBtn.setAttribute('aria-pressed','false');
-  const zoomCtl = $('#zoomCtl'), zoom = $('#zoom');
-  if(caps.zoom && caps.zoom.max > caps.zoom.min){
-    zoomCtl.hidden = false; zoom.min = caps.zoom.min; zoom.max = caps.zoom.max; zoom.step = caps.zoom.step || 0.1;
+  const hasTorch = !!caps.torch;
+  const hasZoom = !!(caps.zoom && caps.zoom.max > caps.zoom.min);
+  $('#torchCtl').hidden = !hasTorch; $('#torchBtn').setAttribute('aria-pressed','false');
+  const zoom = $('#zoom');
+  if(hasZoom){
+    zoom.min = caps.zoom.min; zoom.max = caps.zoom.max; zoom.step = caps.zoom.step || 0.1;
     const cur = (st.track.getSettings && st.track.getSettings().zoom) || caps.zoom.min;
     zoom.value = cur; $('#zoomVal').textContent = Number(cur).toFixed(1) + '×';
-  } else zoomCtl.hidden = true;
+  }
+  $('#zoomCtl').hidden = !hasZoom;
+  const any = hasTorch || hasZoom;
+  $('#adjustBtn').hidden = !any;
+  if(!any){ $('#panel').hidden = true; $('#adjustBtn').setAttribute('aria-pressed','false'); }
 }
 let wakeLock = null;
 async function requestWakeLock(){
@@ -273,6 +219,7 @@ async function requestWakeLock(){
 document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible' && st.running) requestWakeLock(); });
 
 /* ---------- processing ---------- */
+function resetEq(){ st.fmin = st.fmax = NaN; st.lutReady = false; }
 function loop(ts){
   if(!st.running) return;
   if(!st.frozen){
@@ -285,98 +232,92 @@ function tickFps(ts){
   if(!st.fpsT) st.fpsT = ts;
   if(ts - st.fpsT >= 1000){ st.fps = Math.round(st.frames * 1000 / (ts - st.fpsT)); st.frames = 0; st.fpsT = ts; updateStats(); }
 }
+function grabFrame(pw, ph){
+  if(st.mirror){
+    wctx.save(); wctx.translate(pw, 0); wctx.scale(-1, 1);
+    wctx.drawImage(video, 0, 0, pw, ph);
+    wctx.restore();
+  } else {
+    wctx.drawImage(video, 0, 0, pw, ph);
+  }
+}
 function process(grab){
-  const vw = video.videoWidth, vh = video.videoHeight; if(!vw || !vh) return;
-  const pw = Math.max(2, Math.round(vw * st.res)), ph = Math.max(2, Math.round(vh * st.res));
+  const pw = video.videoWidth, ph = video.videoHeight; if(!pw || !ph) return;
   if(work.width !== pw || work.height !== ph){
-    work.width = pw; work.height = ph; ratio = new Float32Array(pw * ph);
+    work.width = pw; work.height = ph; ratio = new Float32Array(pw * ph); resetEq();
     if(!grab) return; // frozen frame lost on resize; wait for next live frame
   }
   if(view.width !== pw || view.height !== ph){ view.width = pw; view.height = ph; }
-  if(grab) wctx.drawImage(video, 0, 0, pw, ph);
+  if(grab) grabFrame(pw, ph);
 
-  if(st.view === 'rgb'){ vctx.drawImage(work, 0, 0); return; }
+  if(st.view === 'normal'){ vctx.drawImage(work, 0, 0); if(!grab) updateStats(); return; }
 
   const img = wctx.getImageData(0, 0, pw, ph), d = img.data, n = pw * ph;
-  const floor = st.floor;
+
+  // pass 1: ratio, valid range, invalid count (R−G ≤ 0 → undefined)
   let vmin = Infinity, vmax = -Infinity, invalid = 0;
   for(let i = 0, j = 0; i < n; i++, j += 4){
     const den = d[j] - d[j+1];
-    if(den < floor){ ratio[i] = NaN; invalid++; continue; }
+    if(den <= 0){ ratio[i] = NaN; invalid++; continue; }
     const v = (d[j+1] - d[j+2]) / den;
     ratio[i] = v; if(v < vmin) vmin = v; if(v > vmax) vmax = v;
   }
   const nvalid = n - invalid; st.invalidPct = 100 * invalid / n;
 
-  // histogram over a clamped range (robust to extreme ratios near the floor)
-  hist.fill(0);
-  let hmin = -1, hmax = 2;
-  if(nvalid){ hmin = Math.max(vmin, -4); hmax = Math.min(vmax, 8); if(hmax - hmin < 1e-3) hmax = hmin + 1e-3; }
-  const span = hmax - hmin, k = NB / span;
-  if(nvalid){
+  if(nvalid > 0){
+    // pass 2: coarse histogram → robust range (0.5–99.5 pct) so the fine bins aren't wasted on ratio outliers
+    coarse.fill(0);
+    let cmin = Math.max(vmin, -64), cmax = Math.min(vmax, 64); if(cmax - cmin < 1e-3) cmax = cmin + 1e-3;
+    const kc = NC / (cmax - cmin);
     for(let i = 0; i < n; i++){
       const v = ratio[i]; if(v !== v) continue;
-      let b = ((v - hmin) * k) | 0; if(b < 0) b = 0; else if(b >= NB) b = NB - 1; hist[b]++;
+      let b = ((v - cmin) * kc) | 0; if(b < 0) b = 0; else if(b >= NC) b = NC - 1; coarse[b]++;
     }
-    const cLo = nvalid * st.clip / 100, cHi = nvalid * (100 - st.clip) / 100;
-    let acc = 0, bLo = 0, bHi = NB - 1;
-    for(let b = 0; b < NB; b++){ acc += hist[b]; if(acc >= cLo){ bLo = b; break; } }
+    const tLo = nvalid * 0.005, tHi = nvalid * 0.995;
+    let acc = 0, bLo = 0, bHi = NC - 1;
+    for(let b = 0; b < NC; b++){ acc += coarse[b]; if(acc >= tLo){ bLo = b; break; } }
     acc = 0;
-    for(let b = 0; b < NB; b++){ acc += hist[b]; if(acc >= cHi){ bHi = b; break; } }
-    let tLo = hmin + bLo / k, tHi = hmin + (bHi + 1) / k;
-    if(tHi - tLo < 1e-3) tHi = tLo + 1e-3;
-    if(st.autoLo !== st.autoLo){ st.autoLo = tLo; st.autoHi = tHi; }
-    else { st.autoLo += (tLo - st.autoLo) * 0.25; st.autoHi += (tHi - st.autoHi) * 0.25; }
-  }
-  st.hmin = hmin; st.hmax = hmax;
+    for(let b = 0; b < NC; b++){ acc += coarse[b]; if(acc >= tHi){ bHi = b; break; } }
+    let rmin = cmin + bLo / kc, rmax = cmin + (bHi + 1) / kc; if(rmax - rmin < 1e-3) rmax = rmin + 1e-3;
+    if(st.fmin !== st.fmin){ st.fmin = rmin; st.fmax = rmax; }
+    else { st.fmin += (rmin - st.fmin) * 0.3; st.fmax += (rmax - st.fmax) * 0.3; }   // damp range jitter between frames
 
-  let lo, hi;
-  if(st.scaleMode === 'auto' && st.autoLo === st.autoLo){ lo = st.autoLo; hi = st.autoHi; } else { lo = st.lo; hi = st.hi; }
-  if(hi <= lo) hi = lo + 1e-3;
-  const sc = 255 / (hi - lo), inv = st.invert;
-  for(let i = 0, j = 0; i < n; i++, j += 4){
-    const v = ratio[i];
-    let y;
-    if(v !== v) y = 0;
-    else { y = (v - lo) * sc; if(y < 0) y = 0; else if(y > 255) y = 255; if(inv) y = 255 - y; }
-    d[j] = d[j+1] = d[j+2] = y; d[j+3] = 255;
-  }
+    // pass 3: fine histogram over the smoothed range → CDF → equalization LUT
+    fine.fill(0);
+    const fmin = st.fmin, kf = NF / (st.fmax - fmin);
+    for(let i = 0; i < n; i++){
+      const v = ratio[i]; if(v !== v) continue;
+      let b = ((v - fmin) * kf) | 0; if(b < 0) b = 0; else if(b >= NF) b = NF - 1; fine[b]++;
+    }
+    let cdf = 0, cdfMin = -1;
+    for(let b = 0; b < NF; b++){
+      cdf += fine[b];
+      if(cdfMin < 0 && cdf > 0) cdfMin = cdf;
+      const y = cdfMin < 0 ? 0 : 255 * (cdf - cdfMin) / Math.max(1, nvalid - cdfMin);
+      lut[b] = st.lutReady ? lut[b] + (y - lut[b]) * 0.5 : y;   // light temporal smoothing of the mapping
+    }
+    st.lutReady = true;
 
-  if(st.view === 'split'){
-    vctx.drawImage(work, 0, 0);
-    const x = pw >> 1;
-    vctx.putImageData(img, 0, 0, x, 0, pw - x, ph);
-    vctx.fillStyle = 'rgba(240,178,74,.9)'; vctx.fillRect(x - 1, 0, 2, ph);
+    // pass 4: write gray
+    const inv = st.invert;
+    for(let i = 0, j = 0; i < n; i++, j += 4){
+      const v = ratio[i];
+      let y;
+      if(v !== v) y = 0;
+      else {
+        let b = ((v - fmin) * kf) | 0; if(b < 0) b = 0; else if(b >= NF) b = NF - 1;
+        y = lut[b]; if(inv) y = 255 - y;
+      }
+      d[j] = d[j+1] = d[j+2] = y; d[j+3] = 255;
+    }
   } else {
-    vctx.putImageData(img, 0, 0);
+    for(let j = 0; j < d.length; j += 4){ d[j] = d[j+1] = d[j+2] = 0; d[j+3] = 255; }
   }
-  if(!$('#panel').hidden) drawHist(lo, hi);
+  vctx.putImageData(img, 0, 0);
   if(!grab) updateStats();
 }
-function drawHist(lo, hi){
-  const W = histC.width, H = histC.height;
-  hctx.clearRect(0, 0, W, H);
-  let mx = 0; for(let b = 0; b < NB; b++) if(hist[b] > mx) mx = hist[b];
-  if(!mx) return;
-  const lmx = Math.log1p(mx);
-  hctx.fillStyle = '#8B95A3';
-  const bw = W / NB;
-  for(let b = 0; b < NB; b++){
-    const h = Math.log1p(hist[b]) / lmx * (H - 4);
-    if(h > 0) hctx.fillRect(b * bw, H - h, Math.max(1, bw), h);
-  }
-  const span = st.hmax - st.hmin;
-  const xLo = (lo - st.hmin) / span * W, xHi = (hi - st.hmin) / span * W;
-  hctx.fillStyle = '#F0B24A';
-  hctx.fillRect(Math.max(0, Math.min(W - 2, xLo)), 0, 2, H);
-  hctx.fillRect(Math.max(0, Math.min(W - 2, xHi)), 0, 2, H);
-  hctx.fillStyle = 'rgba(240,178,74,.12)';
-  hctx.fillRect(Math.max(0, xLo), 0, Math.min(W, xHi) - Math.max(0, xLo), H);
-}
 function updateStats(){
-  const lo = st.scaleMode === 'auto' ? st.autoLo : st.lo, hi = st.scaleMode === 'auto' ? st.autoHi : st.hi;
-  const range = (lo === lo) ? `<b>${lo.toFixed(2)}</b> → <b>${hi.toFixed(2)}</b>` : '—';
-  $('#stats').innerHTML = `${work.width}×${work.height} · <b>${st.frozen ? 'frozen' : st.fps + ' fps'}</b><br>black/white ${range}<br>invalid <b>${st.invalidPct.toFixed(1)}%</b>`;
+  $('#stats').innerHTML = `${work.width}×${work.height} · <b>${st.frozen ? 'frozen' : st.fps + ' fps'}</b>${st.mirror ? ' · mirrored' : ''}<br>undefined <b>${st.invalidPct.toFixed(1)}%</b>`;
 }
 function rerender(){ if(st.frozen) needsRender = true; }
 
@@ -397,28 +338,9 @@ function seg(id, attr, onPick){
   });
 }
 seg('#viewSeg', 'view', v => { st.view = v; rerender(); });
-seg('#scaleSeg', 'scale', v => {
-  st.scaleMode = v; const manual = v === 'manual';
-  $('#manualCtl').hidden = !manual; $('#clipCtl').hidden = manual;
-  $('#scaleHint').textContent = manual ? 'Fixed mapping: values at or below “black at” map to 0, at or above “white at” map to 255.'
-                                       : 'Auto stretches between the low and high percentiles of valid pixels each frame.';
-  rerender(); updateStats();
-});
-seg('#resSeg', 'res', v => { st.res = parseFloat(v); st.autoLo = st.autoHi = NaN; });
 $('#adjustBtn').addEventListener('click', () => {
-  const p = $('#panel'); p.hidden = !p.hidden; $('#adjustBtn').setAttribute('aria-pressed', String(!p.hidden)); rerender();
+  const p = $('#panel'); p.hidden = !p.hidden; $('#adjustBtn').setAttribute('aria-pressed', String(!p.hidden));
 });
-$('#clip').addEventListener('input', e => { st.clip = parseFloat(e.target.value); $('#clipVal').textContent = `${st.clip}% – ${100 - st.clip}%`; rerender(); });
-const fmt = v => (v < 0 ? '−' : '') + Math.abs(v).toFixed(2);
-$('#lo').addEventListener('input', e => { st.lo = parseFloat(e.target.value); $('#loVal').textContent = fmt(st.lo); rerender(); updateStats(); });
-$('#hi').addEventListener('input', e => { st.hi = parseFloat(e.target.value); $('#hiVal').textContent = fmt(st.hi); rerender(); updateStats(); });
-$('#lockBtn').addEventListener('click', () => {
-  if(st.autoLo !== st.autoLo) return;
-  st.lo = Math.round(st.autoLo * 100) / 100; st.hi = Math.round(st.autoHi * 100) / 100;
-  $('#lo').value = st.lo; $('#hi').value = st.hi; $('#loVal').textContent = fmt(st.lo); $('#hiVal').textContent = fmt(st.hi);
-  $('#scaleSeg button[data-scale="manual"]').click();
-});
-$('#floor').addEventListener('input', e => { st.floor = parseInt(e.target.value, 10); $('#floorVal').textContent = st.floor; rerender(); });
 $('#invertBtn').addEventListener('click', e => { st.invert = !st.invert; e.currentTarget.setAttribute('aria-pressed', String(st.invert)); rerender(); });
 $('#torchBtn').addEventListener('click', async e => {
   if(!st.track) return;
@@ -438,8 +360,8 @@ $('#saveBtn').addEventListener('click', async () => {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const files = [];
   const outBlob = await toBlob(view);
-  files.push(new File([outBlob], `ratio_${st.view}_${stamp}.png`, {type:'image/png'}));
-  if(st.view !== 'rgb'){
+  files.push(new File([outBlob], `${st.view === 'processed' ? 'ratio' : 'rgb'}_${stamp}.png`, {type:'image/png'}));
+  if(st.view === 'processed'){
     const rawBlob = await toBlob(work);
     files.push(new File([rawBlob], `rgb_${stamp}.png`, {type:'image/png'}));
   }
