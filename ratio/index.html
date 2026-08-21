@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Ratio Viewfinder</title>
+<title>Erythema Camera</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Ratio">
+<meta name="apple-mobile-web-app-title" content="Erythema">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230A0C10'/%3E%3Ccircle cx='50' cy='50' r='26' fill='none' stroke='%23F0B24A' stroke-width='9'/%3E%3C/svg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0A0C10">
@@ -33,8 +33,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .hud{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;
   padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 0;pointer-events:none;
   background:linear-gradient(rgba(10,12,16,.75),rgba(10,12,16,0))}
-.hud .name{font-size:13px;font-weight:600;letter-spacing:.02em}
-.hud .formula{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-top:2px}
+.hud .formula{font-family:var(--font-mono);font-size:12px;color:var(--muted)}
 .hud .stats{font-family:var(--font-mono);font-size:11px;color:var(--muted);text-align:right;line-height:1.5;
   font-variant-numeric:tabular-nums}
 .hud .stats b{color:var(--text);font-weight:500}
@@ -76,6 +75,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .ctl .val{font-family:var(--font-mono);font-size:12px;color:var(--text);font-variant-numeric:tabular-nums}
 .ctl input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 .small{font-size:12px;padding:6px 10px;min-height:30px;min-width:0}
+.hint{font-size:12px;color:var(--muted);line-height:1.4;margin:0}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 
 .preview{position:fixed;inset:0;background:rgba(10,12,16,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;z-index:10}
 .preview .imgs{display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow:auto;width:100%;align-items:center}
@@ -90,16 +91,13 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
     <video id="src" playsinline muted autoplay></video>
     <canvas id="view" width="16" height="9"></canvas>
     <div class="hud">
-      <div>
-        <div class="name">Ratio Viewfinder</div>
-        <div class="formula">(G−B)/(R−G) → equalized gray</div>
-      </div>
+      <div class="formula" id="formula">(G−B)/(R−G)</div>
       <div class="stats" id="stats">—</div>
     </div>
     <div class="notice" id="notice">
       <div class="card">
-        <h1>Live (G−B)/(R−G) view</h1>
-        <p id="noticeText">Uses the rear camera. Each frame's (G−B)/(R−G) ratio image is histogram-equalized to grayscale; pixels with R−G ≤ 0 (ratio undefined) are shown black.</p>
+        <h1>Erythema Camera</h1>
+        <p id="noticeText">An image processing tool designed to aid in the visualization of redness on the skin. By default, areas of greater erythema are shown with darker pixels. Different varieties of color processing and display options can be found by tapping “Adjust”.</p>
         <p><button class="btn primary" id="startBtn">Start camera</button></p>
       </div>
     </div>
@@ -112,8 +110,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
         <button data-view="normal" aria-pressed="false">Normal</button>
       </div>
       <div class="group">
-        <button class="btn" id="invertBtn" aria-pressed="false">Invert</button>
-        <button class="btn" id="adjustBtn" aria-pressed="false" aria-controls="panel" hidden>Adjust</button>
+        <button class="btn" id="adjustBtn" aria-pressed="false" aria-controls="panel">Adjust</button>
       </div>
     </div>
 
@@ -124,8 +121,41 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
     </div>
 
     <div class="panel" id="panel" hidden>
+      <div class="ctl">
+        <span class="lbl">Erythema filter</span>
+        <div class="seg" id="filterSeg">
+          <button data-filter="gr" aria-pressed="false">G/R</button>
+          <button data-filter="gbrg" aria-pressed="true">(G−B)/(R−G)</button>
+          <button data-filter="gsbr" aria-pressed="false">G/√(B·R)</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <div class="head">
+          <span class="lbl">Contrast enhancement</span>
+          <div class="seg" id="contrastSeg">
+            <button data-cmode="eq" aria-pressed="true">Equalize</button>
+            <button data-cmode="manual" aria-pressed="false">Manual</button>
+          </div>
+        </div>
+      </div>
+      <div class="ctl" id="manualCtl" hidden>
+        <div class="pair">
+          <div class="ctl">
+            <div class="head"><label for="bright">Brightness</label><span class="val" id="brightVal">0</span></div>
+            <input type="range" id="bright" min="-100" max="100" step="1" value="0">
+          </div>
+          <div class="ctl">
+            <div class="head"><label for="contrast">Contrast</label><span class="val" id="contrastVal">0</span></div>
+            <input type="range" id="contrast" min="-100" max="100" step="1" value="0">
+          </div>
+        </div>
+      </div>
+      <div class="ctl">
+        <div class="head"><span class="lbl">Display</span><button class="btn small" id="invertBtn" aria-pressed="false">Invert</button></div>
+        <p class="hint">Default: darker = more erythema. Invert to show erythema as brighter pixels.</p>
+      </div>
       <div class="ctl" id="torchCtl" hidden>
-        <div class="head"><span class="lbl">Light</span><button class="btn small" id="torchBtn" aria-pressed="false">Torch</button></div>
+        <div class="head"><span class="lbl">Light</span><button class="btn small" id="torchBtn" aria-pressed="false">Flashlight off</button></div>
       </div>
       <div class="ctl" id="zoomCtl" hidden>
         <div class="head"><label for="zoom">Zoom</label><span class="val" id="zoomVal">1.0×</span></div>
@@ -154,7 +184,7 @@ let raf = 0, needsRender = false;
 
 const st = {
   stream:null, track:null, facing:'environment', mirror:false, running:false, frozen:false,
-  view:'processed', invert:false, invalidPct:0,
+  view:'processed', invert:false, invalidPct:0, filter:'gbrg', cmode:'eq', bright:0, contrast:0, torch:false,
   fmin:NaN, fmax:NaN, lutReady:false,      // smoothed equalization range + LUT state
   frames:0, fpsT:0, fps:0
 };
@@ -200,7 +230,8 @@ function setupTrackControls(){
   const caps = (st.track && st.track.getCapabilities) ? st.track.getCapabilities() : {};
   const hasTorch = !!caps.torch;
   const hasZoom = !!(caps.zoom && caps.zoom.max > caps.zoom.min);
-  $('#torchCtl').hidden = !hasTorch; $('#torchBtn').setAttribute('aria-pressed','false');
+  $('#torchCtl').hidden = !hasTorch;
+  st.torch = false; setTorchBtn();
   const zoom = $('#zoom');
   if(hasZoom){
     zoom.min = caps.zoom.min; zoom.max = caps.zoom.max; zoom.step = caps.zoom.step || 0.1;
@@ -208,9 +239,6 @@ function setupTrackControls(){
     zoom.value = cur; $('#zoomVal').textContent = Number(cur).toFixed(1) + '×';
   }
   $('#zoomCtl').hidden = !hasZoom;
-  const any = hasTorch || hasZoom;
-  $('#adjustBtn').hidden = !any;
-  if(!any){ $('#panel').hidden = true; $('#adjustBtn').setAttribute('aria-pressed','false'); }
 }
 let wakeLock = null;
 async function requestWakeLock(){
@@ -254,18 +282,23 @@ function process(grab){
 
   const img = wctx.getImageData(0, 0, pw, ph), d = img.data, n = pw * ph;
 
-  // pass 1: ratio, valid range, invalid count (R−G ≤ 0 → undefined)
+  // pass 1: filter value, valid range, invalid count (non-positive denominator → undefined)
+  const mode = st.filter;
   let vmin = Infinity, vmax = -Infinity, invalid = 0;
   for(let i = 0, j = 0; i < n; i++, j += 4){
-    const den = d[j] - d[j+1];
+    const R = d[j], G = d[j+1], B = d[j+2];
+    let den, num;
+    if(mode === 'gbrg'){ den = R - G; num = G - B; }
+    else if(mode === 'gr'){ den = R; num = G; }
+    else { den = Math.sqrt(B * R); num = G; }
     if(den <= 0){ ratio[i] = NaN; invalid++; continue; }
-    const v = (d[j+1] - d[j+2]) / den;
+    const v = num / den;
     ratio[i] = v; if(v < vmin) vmin = v; if(v > vmax) vmax = v;
   }
   const nvalid = n - invalid; st.invalidPct = 100 * invalid / n;
 
   if(nvalid > 0){
-    // pass 2: coarse histogram → robust range (0.5–99.5 pct) so the fine bins aren't wasted on ratio outliers
+    // pass 2: coarse histogram → robust display range
     coarse.fill(0);
     let cmin = Math.max(vmin, -64), cmax = Math.min(vmax, 64); if(cmax - cmin < 1e-3) cmax = cmin + 1e-3;
     const kc = NC / (cmax - cmin);
@@ -273,42 +306,63 @@ function process(grab){
       const v = ratio[i]; if(v !== v) continue;
       let b = ((v - cmin) * kc) | 0; if(b < 0) b = 0; else if(b >= NC) b = NC - 1; coarse[b]++;
     }
-    const tLo = nvalid * 0.005, tHi = nvalid * 0.995;
-    let acc = 0, bLo = 0, bHi = NC - 1;
-    for(let b = 0; b < NC; b++){ acc += coarse[b]; if(acc >= tLo){ bLo = b; break; } }
+    // IQR fences (P25/P75 ± 1.5×IQR) rather than tail percentiles: extreme ratios from
+    // near-zero denominators (e.g. white background) can occupy a large share of the frame,
+    // and fences keep them from crushing the display range of the skin pixels
+    const t25 = nvalid * 0.25, t75 = nvalid * 0.75;
+    let acc = 0, b25 = 0, b75 = NC - 1;
+    for(let b = 0; b < NC; b++){ acc += coarse[b]; if(acc >= t25){ b25 = b; break; } }
     acc = 0;
-    for(let b = 0; b < NC; b++){ acc += coarse[b]; if(acc >= tHi){ bHi = b; break; } }
-    let rmin = cmin + bLo / kc, rmax = cmin + (bHi + 1) / kc; if(rmax - rmin < 1e-3) rmax = rmin + 1e-3;
+    for(let b = 0; b < NC; b++){ acc += coarse[b]; if(acc >= t75){ b75 = b; break; } }
+    const q1 = cmin + b25 / kc, q3 = cmin + (b75 + 1) / kc, iqr = Math.max(q3 - q1, 1e-3);
+    let rmin = Math.max(vmin, q1 - 1.5 * iqr), rmax = Math.min(vmax, q3 + 1.5 * iqr);
+    if(rmax - rmin < 1e-3) rmax = rmin + 1e-3;
     if(st.fmin !== st.fmin){ st.fmin = rmin; st.fmax = rmax; }
     else { st.fmin += (rmin - st.fmin) * 0.3; st.fmax += (rmax - st.fmax) * 0.3; }   // damp range jitter between frames
 
-    // pass 3: fine histogram over the smoothed range → CDF → equalization LUT
-    fine.fill(0);
-    const fmin = st.fmin, kf = NF / (st.fmax - fmin);
-    for(let i = 0; i < n; i++){
-      const v = ratio[i]; if(v !== v) continue;
-      let b = ((v - fmin) * kf) | 0; if(b < 0) b = 0; else if(b >= NF) b = NF - 1; fine[b]++;
-    }
-    let cdf = 0, cdfMin = -1;
-    for(let b = 0; b < NF; b++){
-      cdf += fine[b];
-      if(cdfMin < 0 && cdf > 0) cdfMin = cdf;
-      const y = cdfMin < 0 ? 0 : 255 * (cdf - cdfMin) / Math.max(1, nvalid - cdfMin);
-      lut[b] = st.lutReady ? lut[b] + (y - lut[b]) * 0.5 : y;   // light temporal smoothing of the mapping
-    }
-    st.lutReady = true;
-
-    // pass 4: write gray
-    const inv = st.invert;
-    for(let i = 0, j = 0; i < n; i++, j += 4){
-      const v = ratio[i];
-      let y;
-      if(v !== v) y = 0;
-      else {
-        let b = ((v - fmin) * kf) | 0; if(b < 0) b = 0; else if(b >= NF) b = NF - 1;
-        y = lut[b]; if(inv) y = 255 - y;
+    const fmin = st.fmin, kf = NF / (st.fmax - fmin), inv = st.invert;
+    if(st.cmode === 'eq'){
+      // pass 3: fine histogram over the smoothed range → CDF → equalization LUT
+      fine.fill(0);
+      for(let i = 0; i < n; i++){
+        const v = ratio[i]; if(v !== v) continue;
+        let b = ((v - fmin) * kf) | 0; if(b < 0) b = 0; else if(b >= NF) b = NF - 1; fine[b]++;
       }
-      d[j] = d[j+1] = d[j+2] = y; d[j+3] = 255;
+      let cdf = 0, cdfMin = -1;
+      for(let b = 0; b < NF; b++){
+        cdf += fine[b];
+        if(cdfMin < 0 && cdf > 0) cdfMin = cdf;
+        const y = cdfMin < 0 ? 0 : 255 * (cdf - cdfMin) / Math.max(1, nvalid - cdfMin);
+        lut[b] = st.lutReady ? lut[b] + (y - lut[b]) * 0.5 : y;   // light temporal smoothing of the mapping
+      }
+      st.lutReady = true;
+
+      // pass 4: write gray through the LUT
+      for(let i = 0, j = 0; i < n; i++, j += 4){
+        const v = ratio[i];
+        let y;
+        if(v !== v) y = 0;
+        else {
+          let b = ((v - fmin) * kf) | 0; if(b < 0) b = 0; else if(b >= NF) b = NF - 1;
+          y = lut[b]; if(inv) y = 255 - y;
+        }
+        d[j] = d[j+1] = d[j+2] = y; d[j+3] = 255;
+      }
+    } else {
+      // manual: linear stretch over the robust range, then brightness/contrast about mid-gray
+      const inw = 255 / (st.fmax - fmin);
+      const C = Math.pow(2, st.contrast / 50), broff = st.bright * 1.28;   // contrast ±100 → ×0.25..×4; brightness ±100 → ±128 levels
+      for(let i = 0, j = 0; i < n; i++, j += 4){
+        const v = ratio[i];
+        let y;
+        if(v !== v) y = 0;
+        else {
+          y = ((v - fmin) * inw - 127.5) * C + 127.5 + broff;
+          if(y < 0) y = 0; else if(y > 255) y = 255;
+          if(inv) y = 255 - y;
+        }
+        d[j] = d[j+1] = d[j+2] = y; d[j+3] = 255;
+      }
     }
   } else {
     for(let j = 0; j < d.length; j += 4){ d[j] = d[j+1] = d[j+2] = 0; d[j+3] = 255; }
@@ -317,7 +371,7 @@ function process(grab){
   if(!grab) updateStats();
 }
 function updateStats(){
-  $('#stats').innerHTML = `${work.width}×${work.height} · <b>${st.frozen ? 'frozen' : st.fps + ' fps'}</b>${st.mirror ? ' · mirrored' : ''}<br>undefined <b>${st.invalidPct.toFixed(1)}%</b>`;
+  $('#stats').innerHTML = `${work.width}×${work.height} · <b>${st.frozen ? 'frozen' : st.fps + ' fps'}</b>${st.mirror ? ' · mirrored' : ''}`;
 }
 function rerender(){ if(st.frozen) needsRender = true; }
 
@@ -338,14 +392,27 @@ function seg(id, attr, onPick){
   });
 }
 seg('#viewSeg', 'view', v => { st.view = v; rerender(); });
+const FLABEL = {gr:'G/R', gbrg:'(G−B)/(R−G)', gsbr:'G/√(B·R)'};
+function updateFormula(){ $('#formula').textContent = FLABEL[st.filter]; }
+seg('#filterSeg', 'filter', v => { st.filter = v; updateFormula(); resetEq(); rerender(); });
+seg('#contrastSeg', 'cmode', v => { st.cmode = v; $('#manualCtl').hidden = v !== 'manual'; st.lutReady = false; updateFormula(); rerender(); });
+$('#bright').addEventListener('input', e => { st.bright = parseInt(e.target.value, 10); $('#brightVal').textContent = st.bright; rerender(); });
+$('#contrast').addEventListener('input', e => { st.contrast = parseInt(e.target.value, 10); $('#contrastVal').textContent = st.contrast; rerender(); });
 $('#adjustBtn').addEventListener('click', () => {
   const p = $('#panel'); p.hidden = !p.hidden; $('#adjustBtn').setAttribute('aria-pressed', String(!p.hidden));
 });
 $('#invertBtn').addEventListener('click', e => { st.invert = !st.invert; e.currentTarget.setAttribute('aria-pressed', String(st.invert)); rerender(); });
-$('#torchBtn').addEventListener('click', async e => {
+function setTorchBtn(){
+  const b = $('#torchBtn');
+  b.setAttribute('aria-pressed', String(st.torch));
+  b.textContent = st.torch ? 'Flashlight on' : 'Flashlight off';
+}
+$('#torchBtn').addEventListener('click', async () => {
   if(!st.track) return;
-  const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
-  try{ await st.track.applyConstraints({advanced:[{torch:on}]}); e.currentTarget.setAttribute('aria-pressed', String(on)); }catch(err){}
+  const on = !st.torch;
+  try{ await st.track.applyConstraints({advanced:[{torch:on}]}); st.torch = on; }
+  catch(err){ try{ await st.track.applyConstraints({torch:on}); st.torch = on; }catch(e2){} }
+  setTorchBtn();
 });
 $('#zoom').addEventListener('input', async e => {
   const z = parseFloat(e.target.value); $('#zoomVal').textContent = z.toFixed(1) + '×';
@@ -360,7 +427,8 @@ $('#saveBtn').addEventListener('click', async () => {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const files = [];
   const outBlob = await toBlob(view);
-  files.push(new File([outBlob], `${st.view === 'processed' ? 'ratio' : 'rgb'}_${stamp}.png`, {type:'image/png'}));
+  const FNAME = {gr:'GR', gbrg:'GB-RG', gsbr:'G-sqrtBR'};
+  files.push(new File([outBlob], `${st.view === 'processed' ? FNAME[st.filter] : 'rgb'}_${stamp}.png`, {type:'image/png'}));
   if(st.view === 'processed'){
     const rawBlob = await toBlob(work);
     files.push(new File([rawBlob], `rgb_${stamp}.png`, {type:'image/png'}));
