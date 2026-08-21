@@ -122,6 +122,15 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 
     <div class="panel" id="panel" hidden>
       <div class="ctl">
+        <span class="lbl">Mask</span>
+        <div class="seg" id="maskSeg">
+          <button data-mask="off" aria-pressed="false">Off</button>
+          <button data-mask="person" aria-pressed="true">Person</button>
+          <button data-mask="skin" aria-pressed="false">Skin</button>
+        </div>
+        <p class="hint" id="maskHint">Only detected person pixels are processed; everything else is dimmed.</p>
+      </div>
+      <div class="ctl">
         <span class="lbl">Erythema filter</span>
         <div class="seg" id="filterSeg">
           <button data-filter="gr" aria-pressed="false">G/R</button>
@@ -184,7 +193,7 @@ let raf = 0, needsRender = false;
 
 const st = {
   stream:null, track:null, facing:'environment', mirror:false, running:false, frozen:false,
-  view:'processed', invert:false, invalidPct:0, filter:'gbrg', cmode:'eq', bright:0, contrast:0, torch:false,
+  view:'processed', invert:false, invalidPct:0, filter:'gbrg', cmode:'eq', bright:0, contrast:0, torch:false, mask:'person',
   fmin:NaN, fmax:NaN, lutReady:false,      // smoothed equalization range + LUT state
   frames:0, fpsT:0, fps:0
 };
@@ -215,7 +224,8 @@ async function start(){
   $('#notice').hidden = true;
   $('#flipBtn').disabled = $('#saveBtn').disabled = $('#freezeBtn').disabled = false;
   st.running = true; st.frozen = false; $('#freezeBtn').textContent = 'Freeze'; $('#freezeBtn').setAttribute('aria-pressed','false');
-  resetEq();
+  resetEq(); clearMask();
+  if(st.mask !== 'off') ensureSegmenter(st.mask);
   requestWakeLock();
   cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
 }
@@ -246,6 +256,68 @@ async function requestWakeLock(){
 }
 document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible' && st.running) requestWakeLock(); });
 
+/* ---------- person/skin segmentation (MediaPipe, on-device) ---------- */
+const SEG_MODELS = { person:'vendor/models/selfie_segmenter.tflite', skin:'vendor/models/selfie_multiclass.tflite' };
+const SEG_INTERVAL = 100;                    // ms between segmentations; mask is reused in between
+let visionLib = null, segmenter = null, segKind = '', segLoading = false;
+let maskArr = null, maskW = 0, maskH = 0, mxMap = null, lastSegT = -1;
+function clearMask(){ maskArr = null; mxMap = null; }
+function setMaskHint(t){ $('#maskHint').textContent = t; }
+function pressMask(v){ document.querySelectorAll('#maskSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mask === v))); }
+async function ensureSegmenter(kind){
+  if(segmenter && segKind === kind) return true;
+  if(segLoading) return false;
+  segLoading = true;
+  setMaskHint(kind === 'skin' ? 'Loading skin model (16 MB, first time only)…' : 'Loading person model…');
+  try{
+    if(!visionLib){
+      const mod = await import('./vendor/tasks-vision/vision_bundle.mjs');
+      const files = await mod.FilesetResolver.forVisionTasks('./vendor/tasks-vision/wasm');
+      visionLib = {mod, files};
+    }
+    const opts = kind === 'skin'
+      ? {outputCategoryMask:true, outputConfidenceMasks:false}
+      : {outputCategoryMask:false, outputConfidenceMasks:true};
+    let inst = null, lastErr = null;
+    for(const delegate of ['GPU','CPU']){
+      try{
+        inst = await visionLib.mod.ImageSegmenter.createFromOptions(visionLib.files,
+          {baseOptions:{modelAssetPath:SEG_MODELS[kind], delegate}, runningMode:'VIDEO', ...opts});
+        break;
+      }catch(e){ lastErr = e; }
+    }
+    if(!inst) throw lastErr || new Error('could not initialize the model');
+    if(segmenter){ try{ segmenter.close(); }catch(e){} }
+    segmenter = inst; segKind = kind;
+    setMaskHint(kind === 'skin'
+      ? 'Only face + body skin pixels are processed; everything else is dimmed.'
+      : 'Only detected person pixels are processed; everything else is dimmed.');
+    return true;
+  }catch(e){
+    setMaskHint('Mask unavailable on this device: ' + (e && e.message || e));
+    return false;
+  }finally{ segLoading = false; }
+}
+function runSeg(now){
+  if(now <= lastSegT) now = lastSegT + 1;      // segmentForVideo needs strictly increasing timestamps
+  lastSegT = now;
+  let res;
+  try{ res = segmenter.segmentForVideo(work, now); }catch(e){ return; }
+  try{
+    if(segKind === 'person'){
+      const m = res.confidenceMasks[0], f = m.getAsFloat32Array();   // confidence of "person" (verified: 1.0 on subject)
+      maskW = m.width; maskH = m.height;
+      if(!maskArr || maskArr.length !== f.length){ maskArr = new Uint8Array(f.length); mxMap = null; }
+      for(let i = 0; i < f.length; i++) maskArr[i] = f[i] > 0.5 ? 1 : 0;
+    } else {
+      const m = res.categoryMask, u = m.getAsUint8Array();           // classes: 0 bg, 1 hair, 2 body-skin, 3 face-skin, 4 clothes, 5 others
+      maskW = m.width; maskH = m.height;
+      if(!maskArr || maskArr.length !== u.length){ maskArr = new Uint8Array(u.length); mxMap = null; }
+      for(let i = 0; i < u.length; i++){ const c = u[i]; maskArr[i] = (c === 2 || c === 3) ? 1 : 0; }
+    }
+  }finally{ try{ res.close(); }catch(e){} }
+}
+
 /* ---------- processing ---------- */
 function resetEq(){ st.fmin = st.fmax = NaN; st.lutReady = false; }
 function loop(ts){
@@ -272,7 +344,7 @@ function grabFrame(pw, ph){
 function process(grab){
   const pw = video.videoWidth, ph = video.videoHeight; if(!pw || !ph) return;
   if(work.width !== pw || work.height !== ph){
-    work.width = pw; work.height = ph; ratio = new Float32Array(pw * ph); resetEq();
+    work.width = pw; work.height = ph; ratio = new Float32Array(pw * ph); resetEq(); clearMask();
     if(!grab) return; // frozen frame lost on resize; wait for next live frame
   }
   if(view.width !== pw || view.height !== ph){ view.width = pw; view.height = ph; }
@@ -280,20 +352,33 @@ function process(grab){
 
   if(st.view === 'normal'){ vctx.drawImage(work, 0, 0); if(!grab) updateStats(); return; }
 
+  const maskOn = st.mask !== 'off' && segmenter && segKind === st.mask;
+  if(maskOn){
+    const now = performance.now();
+    if(grab ? (now - lastSegT >= SEG_INTERVAL) : !maskArr) runSeg(now);
+  }
   const img = wctx.getImageData(0, 0, pw, ph), d = img.data, n = pw * ph;
 
-  // pass 1: filter value, valid range, invalid count (non-positive denominator → undefined)
+  // pass 1: filter value, valid range, invalid count.
+  // Sentinels in ratio[]: NaN = undefined (non-positive denominator, shown black);
+  // -Infinity = outside the person/skin mask (shown as dimmed camera pixels).
+  const gate = maskOn && maskArr;
+  if(gate && !mxMap){ mxMap = new Uint16Array(pw); for(let x = 0; x < pw; x++) mxMap[x] = (x * maskW / pw) | 0; }
   const mode = st.filter;
   let vmin = Infinity, vmax = -Infinity, invalid = 0;
-  for(let i = 0, j = 0; i < n; i++, j += 4){
-    const R = d[j], G = d[j+1], B = d[j+2];
-    let den, num;
-    if(mode === 'gbrg'){ den = R - G; num = G - B; }
-    else if(mode === 'gr'){ den = R; num = G; }
-    else { den = Math.sqrt(B * R); num = G; }
-    if(den <= 0){ ratio[i] = NaN; invalid++; continue; }
-    const v = num / den;
-    ratio[i] = v; if(v < vmin) vmin = v; if(v > vmax) vmax = v;
+  for(let y = 0, i = 0, j = 0; y < ph; y++){
+    const mrow = gate ? ((y * maskH / ph) | 0) * maskW : 0;
+    for(let x = 0; x < pw; x++, i++, j += 4){
+      if(gate && !maskArr[mrow + mxMap[x]]){ ratio[i] = -Infinity; invalid++; continue; }
+      const R = d[j], G = d[j+1], B = d[j+2];
+      let den, num;
+      if(mode === 'gbrg'){ den = R - G; num = G - B; }
+      else if(mode === 'gr'){ den = R; num = G; }
+      else { den = Math.sqrt(B * R); num = G; }
+      if(den <= 0){ ratio[i] = NaN; invalid++; continue; }
+      const v = num / den;
+      ratio[i] = v; if(v < vmin) vmin = v; if(v > vmax) vmax = v;
+    }
   }
   const nvalid = n - invalid; st.invalidPct = 100 * invalid / n;
 
@@ -303,7 +388,7 @@ function process(grab){
     let cmin = Math.max(vmin, -64), cmax = Math.min(vmax, 64); if(cmax - cmin < 1e-3) cmax = cmin + 1e-3;
     const kc = NC / (cmax - cmin);
     for(let i = 0; i < n; i++){
-      const v = ratio[i]; if(v !== v) continue;
+      const v = ratio[i]; if(!Number.isFinite(v)) continue;
       let b = ((v - cmin) * kc) | 0; if(b < 0) b = 0; else if(b >= NC) b = NC - 1; coarse[b]++;
     }
     // IQR fences (P25/P75 ± 1.5×IQR) rather than tail percentiles: extreme ratios from
@@ -325,7 +410,7 @@ function process(grab){
       // pass 3: fine histogram over the smoothed range → CDF → equalization LUT
       fine.fill(0);
       for(let i = 0; i < n; i++){
-        const v = ratio[i]; if(v !== v) continue;
+        const v = ratio[i]; if(!Number.isFinite(v)) continue;
         let b = ((v - fmin) * kf) | 0; if(b < 0) b = 0; else if(b >= NF) b = NF - 1; fine[b]++;
       }
       let cdf = 0, cdfMin = -1;
@@ -341,6 +426,7 @@ function process(grab){
       for(let i = 0, j = 0; i < n; i++, j += 4){
         const v = ratio[i];
         let y;
+        if(v === -Infinity){ d[j] >>= 2; d[j+1] >>= 2; d[j+2] >>= 2; d[j+3] = 255; continue; }
         if(v !== v) y = 0;
         else {
           let b = ((v - fmin) * kf) | 0; if(b < 0) b = 0; else if(b >= NF) b = NF - 1;
@@ -355,6 +441,7 @@ function process(grab){
       for(let i = 0, j = 0; i < n; i++, j += 4){
         const v = ratio[i];
         let y;
+        if(v === -Infinity){ d[j] >>= 2; d[j+1] >>= 2; d[j+2] >>= 2; d[j+3] = 255; continue; }
         if(v !== v) y = 0;
         else {
           y = ((v - fmin) * inw - 127.5) * C + 127.5 + broff;
@@ -365,7 +452,12 @@ function process(grab){
       }
     }
   } else {
-    for(let j = 0; j < d.length; j += 4){ d[j] = d[j+1] = d[j+2] = 0; d[j+3] = 255; }
+    // no valid pixels at all: dim masked-out areas, black elsewhere
+    for(let i = 0, j = 0; i < n; i++, j += 4){
+      if(ratio[i] === -Infinity){ d[j] >>= 2; d[j+1] >>= 2; d[j+2] >>= 2; }
+      else { d[j] = d[j+1] = d[j+2] = 0; }
+      d[j+3] = 255;
+    }
   }
   vctx.putImageData(img, 0, 0);
   if(!grab) updateStats();
@@ -395,6 +487,13 @@ seg('#viewSeg', 'view', v => { st.view = v; rerender(); });
 const FLABEL = {gr:'G/R', gbrg:'(G−B)/(R−G)', gsbr:'G/√(B·R)'};
 function updateFormula(){ $('#formula').textContent = FLABEL[st.filter]; }
 seg('#filterSeg', 'filter', v => { st.filter = v; updateFormula(); resetEq(); rerender(); });
+seg('#maskSeg', 'mask', async v => {
+  st.mask = v; clearMask();
+  if(v === 'off'){ setMaskHint('All pixels are processed.'); rerender(); return; }
+  const ok = await ensureSegmenter(v);
+  if(!ok && !(segmenter && segKind === v)){ if(!segLoading){ st.mask = 'off'; pressMask('off'); } }
+  rerender();
+});
 seg('#contrastSeg', 'cmode', v => { st.cmode = v; $('#manualCtl').hidden = v !== 'manual'; st.lutReady = false; updateFormula(); rerender(); });
 $('#bright').addEventListener('input', e => { st.bright = parseInt(e.target.value, 10); $('#brightVal').textContent = st.bright; rerender(); });
 $('#contrast').addEventListener('input', e => { st.contrast = parseInt(e.target.value, 10); $('#contrastVal').textContent = st.contrast; rerender(); });
