@@ -80,6 +80,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .ctl input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 .small{font-size:12px;padding:6px 10px;min-height:30px;min-width:0}
 .sub{display:flex;flex-direction:column;gap:10px;padding-top:2px}
+.ctl select{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);
+  padding:9px 10px;font-size:13px;color:var(--text);width:100%;-webkit-appearance:none;appearance:none}
 .hint{font-size:12px;color:var(--muted);line-height:1.4;margin:0}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 
@@ -166,12 +168,16 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
         </div>
       </div>
       <div class="ctl">
-        <div class="head"><label for="clip">CLAHE clip limit</label><span class="val" id="clipVal">0.05</span></div>
-        <input type="range" id="clip" min="0.01" max="0.2" step="0.01" value="0.05">
+        <div class="head"><label for="clip">CLAHE clip limit</label><span class="val" id="clipVal">0.20</span></div>
+        <input type="range" id="clip" min="0.05" max="0.5" step="0.01" value="0.2">
       </div>
       <div class="ctl">
         <div class="head"><span class="lbl">Display</span><button class="btn small" id="invertBtn" aria-pressed="false">Invert</button></div>
         <p class="hint">Default: veins darker than skin. Invert to show veins as brighter pixels.</p>
+      </div>
+      <div class="ctl" id="camCtl" hidden>
+        <label for="camSel">Camera</label>
+        <select id="camSel"></select>
       </div>
       <div class="ctl" id="torchCtl" hidden>
         <div class="head"><span class="lbl">Light</span><button class="btn small" id="torchBtn" aria-pressed="false">Flashlight off</button></div>
@@ -200,7 +206,8 @@ const overlay = $('#overlay'), octx = overlay.getContext('2d');
 const work = document.createElement('canvas'), wctx = work.getContext('2d', {willReadFrequently:true});
 const small = document.createElement('canvas'), sctx = small.getContext('2d', {willReadFrequently:true});
 
-const PROC_MAX = 1024;            // long-side cap for the processing canvas
+const PROC_MAX = 1024;            // long-side cap for live processing
+const PHOTO_MAX = 2048;           // long-side cap for opened stills (one-shot, so afford more detail)
 const NB = 256, NR = 512;         // CLAHE bins / range-stretch histogram bins
 const VEIN_FOREARM = 0.0695;      // median vein/forearm width ratio (forearmRatioAnalysis, n=9)
 const DEF_FRAC = 0.58;            // assumed forearm fraction of the frame's short side (auto fallback)
@@ -216,9 +223,9 @@ let tileHist = new Uint32Array(0), tileCnt = new Uint32Array(0), tileLut = new U
 let raf = 0, needsRender = false;
 
 const st = {
-  stream:null, track:null, facing:'environment', mirror:false, running:false, frozen:false, srcMode:'live',
+  stream:null, track:null, facing:'environment', deviceId:null, mirror:false, running:false, frozen:false, srcMode:'live',
   view:'enh', invert:false, showTiles:false, torch:false,
-  x:1.0, clip:0.05,
+  x:1.0, clip:0.2,
   place:'auto', tileW:0, tileH:0,                   // 0 = manual tiles not yet seeded (square default)
   lo:NaN, hi:NaN,                                   // smoothed stretch range
   aCx:0, aCy:0, autoTheta:NaN, autoW:NaN, autoOk:false, lastAuto:0,
@@ -230,12 +237,17 @@ async function start(){
   if(!window.isSecureContext){ fail('This page must be served over HTTPS (or localhost) for the camera to work.'); return; }
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ fail('This browser does not expose the camera API.'); return; }
   stopStream();
+  // Ask for the least-processed stream the web allows: 1080p ideal (camera frames are 4:2:0
+  // chroma-subsampled, so capture resolution bounds the R/G detail we process) and
+  // resizeMode 'none' so the browser never rescales the sensor stream itself.
+  const vc = st.deviceId ? {deviceId:{exact:st.deviceId}} : {facingMode:{ideal:st.facing}};
+  vc.width = {ideal:1920}; vc.height = {ideal:1080}; vc.resizeMode = {ideal:'none'};
   try{
-    st.stream = await navigator.mediaDevices.getUserMedia({
-      audio:false,
-      video:{ facingMode:{ideal:st.facing}, width:{ideal:1280}, height:{ideal:720} }
-    });
+    st.stream = await navigator.mediaDevices.getUserMedia({audio:false, video:vc});
   }catch(e){
+    if(st.deviceId && e && (e.name === 'OverconstrainedError' || e.name === 'NotFoundError')){
+      st.deviceId = null; start(); return;               // stale camera id: retry with auto pick
+    }
     const msg = e && e.name === 'NotAllowedError'
       ? 'Camera access was blocked. If this page is embedded, open it in its own browser tab; then check the site camera permission.'
       : (e && e.name === 'NotFoundError' ? 'No camera was found on this device.' : 'Could not open the camera: ' + (e && e.message || e));
@@ -248,6 +260,7 @@ async function start(){
   const facing = settings.facingMode || st.facing;
   st.mirror = facing === 'user';
   setupTrackControls();
+  listCameras();
   $('#notice').hidden = true;
   $('#flipBtn').disabled = $('#saveBtn').disabled = $('#freezeBtn').disabled = false;
   st.srcMode = 'live'; st.running = true; st.frozen = false;
@@ -277,6 +290,26 @@ function setupTrackControls(){
   }
   $('#zoomCtl').hidden = !hasZoom;
 }
+// Multi-camera devices (e.g. Samsung) expose several rear cameras and the browser's default pick
+// can be a heavily-processed logical one; letting the user choose a physical camera directly
+// often avoids the worst ISP smoothing.
+async function listCameras(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  let devs = [];
+  try{ devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput'); }catch(e){}
+  const sel = $('#camSel');
+  sel.innerHTML = '';
+  const auto = document.createElement('option');
+  auto.value = ''; auto.textContent = st.facing === 'environment' ? 'Auto (rear)' : 'Auto (front)';
+  sel.appendChild(auto);
+  devs.forEach((dv, i) => {
+    const o = document.createElement('option');
+    o.value = dv.deviceId; o.textContent = dv.label || 'Camera ' + (i + 1);
+    sel.appendChild(o);
+  });
+  sel.value = st.deviceId || '';
+  $('#camCtl').hidden = devs.length < 2;
+}
 let wakeLock = null;
 async function requestWakeLock(){
   try{ if('wakeLock' in navigator){ wakeLock = await navigator.wakeLock.request('screen'); } }catch(e){}
@@ -297,7 +330,7 @@ async function openPhoto(file){
   }
   if(!bmp){ fail('Could not read that image.'); return; }
   const iw = bmp.width || bmp.naturalWidth, ih = bmp.height || bmp.naturalHeight;
-  const s = Math.min(1, PROC_MAX / Math.max(iw, ih));
+  const s = Math.min(1, PHOTO_MAX / Math.max(iw, ih));
   stopStream();
   st.srcMode = 'photo'; st.mirror = false; st.running = true; st.frozen = true;
   work.width = Math.max(2, Math.round(iw * s)); work.height = Math.max(2, Math.round(ih * s));
@@ -309,7 +342,7 @@ async function openPhoto(file){
   $('#saveBtn').disabled = false;
   $('#flipBtn').disabled = $('#freezeBtn').disabled = true;
   $('#freezeBtn').textContent = 'Freeze';
-  $('#torchCtl').hidden = $('#zoomCtl').hidden = true;
+  $('#torchCtl').hidden = $('#zoomCtl').hidden = $('#camCtl').hidden = true;
   needsRender = true;
   cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
 }
@@ -652,7 +685,8 @@ function updateFormula(){
 }
 function updateStats(){
   const mode = st.srcMode === 'photo' ? 'photo' : (st.frozen ? 'frozen' : st.fps + ' fps');
-  $('#stats').innerHTML = `${work.width}×${work.height} · <b>${mode}</b>`;
+  const src = st.srcMode === 'live' && video.videoWidth ? `${video.videoWidth}×${video.videoHeight} → ` : '';
+  $('#stats').innerHTML = `${src}${work.width}×${work.height} · <b>${mode}</b>`;
 }
 function rerender(){
   if(st.srcMode === 'photo' && st.place === 'auto') analyze();
@@ -661,7 +695,8 @@ function rerender(){
 
 /* ---------- controls ---------- */
 $('#startBtn').addEventListener('click', start);
-$('#flipBtn').addEventListener('click', () => { st.facing = st.facing === 'environment' ? 'user' : 'environment'; start(); });
+$('#flipBtn').addEventListener('click', () => { st.deviceId = null; st.facing = st.facing === 'environment' ? 'user' : 'environment'; start(); });
+$('#camSel').addEventListener('change', e => { st.deviceId = e.target.value || null; start(); });
 $('#freezeBtn').addEventListener('click', () => {
   st.frozen = !st.frozen; $('#freezeBtn').textContent = st.frozen ? 'Resume' : 'Freeze';
   $('#freezeBtn').setAttribute('aria-pressed', String(st.frozen));
@@ -734,6 +769,24 @@ $('#zoom').addEventListener('input', async e => {
 
 /* ---------- save ---------- */
 const toBlob = c => new Promise(r => c.toBlob(r, 'image/png'));
+// The least-smoothed capture the web allows: a full-resolution still from the camera's photo
+// pipeline (typically 8-12 MP vs the ~1080p video stream). Saved alongside the frames;
+// re-open it with "Open photo" to process at full detail.
+async function captureStill(){
+  if(st.srcMode !== 'live' || !st.track || typeof ImageCapture === 'undefined') return null;
+  try{
+    const ic = new ImageCapture(st.track);
+    let opts = null;
+    try{
+      const pc = await ic.getPhotoCapabilities();
+      if(pc && pc.imageWidth && pc.imageHeight) opts = {imageWidth:pc.imageWidth.max, imageHeight:pc.imageHeight.max};
+    }catch(e){}
+    let blob = null;
+    if(opts) blob = await ic.takePhoto(opts).catch(() => null);
+    if(!blob) blob = await ic.takePhoto().catch(() => null);
+    return blob;
+  }catch(e){ return null; }
+}
 $('#saveBtn').addEventListener('click', async () => {
   if(!st.running || !work.width) return;
   const wasFrozen = st.frozen; st.frozen = true;
@@ -746,6 +799,9 @@ $('#saveBtn').addEventListener('click', async () => {
     const rawBlob = await toBlob(work);
     files.push(new File([rawBlob], `rgb_${stamp}.png`, {type:'image/png'}));
   }
+  const still = await captureStill();
+  if(still) files.push(new File([still], `still_${stamp}.${(still.type || '').includes('png') ? 'png' : 'jpg'}`,
+                                {type: still.type || 'image/jpeg'}));
   st.frozen = wasFrozen;
   if(window.claude && typeof window.claude.use === 'function'){
     // Claude Artifact viewer: script-driven downloads are blocked; offer its save prompt,
