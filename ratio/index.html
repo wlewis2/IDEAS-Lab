@@ -136,9 +136,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
           <button data-filter="gr" aria-pressed="false">G/R</button>
           <button data-filter="gbrg" aria-pressed="true">(G−B)/(R−G)</button>
           <button data-filter="gsbr" aria-pressed="false">G/√(B·R)</button>
+          <button data-filter="affine" aria-pressed="false">Affine</button>
         </div>
       </div>
-      <div class="ctl">
+      <div class="ctl" id="contrastCtl">
         <div class="head">
           <span class="lbl">Contrast enhancement</span>
           <div class="seg" id="contrastSeg">
@@ -365,6 +366,31 @@ function process(grab){
   const gate = maskOn && maskArr;
   if(gate && !mxMap){ mxMap = new Uint16Array(pw); for(let x = 0; x < pw; x++) mxMap[x] = (x * maskW / pw) | 0; }
   const mode = st.filter;
+  if(mode === 'affine'){
+    // Affine erythema transform: [R' G' B']ᵀ = M·[R G B 1]ᵀ, rendered directly in color
+    // (no scalar ratio, so the equalize/manual pipeline does not apply).
+    const inv = st.invert;
+    let invalid = 0;
+    for(let y = 0, j = 0; y < ph; y++){
+      const mrow = gate ? ((y * maskH / ph) | 0) * maskW : 0;
+      for(let x = 0; x < pw; x++, j += 4){
+        if(gate && !maskArr[mrow + mxMap[x]]){ d[j] >>= 2; d[j+1] >>= 2; d[j+2] >>= 2; d[j+3] = 255; invalid++; continue; }
+        const R = d[j], G = d[j+1], B = d[j+2];
+        let r = -1.1083582  * R + 2.59688338 * G - 1.45717112 * B + 208.40378607;
+        let g = -2.16832887 * R + 5.05563308 * G - 2.82279622 * B + 162.84871416;
+        let b = -1.98077001 * R + 4.60832486 * G - 2.56616001 * B + 166.83950708;
+        if(r < 0) r = 0; else if(r > 255) r = 255;
+        if(g < 0) g = 0; else if(g > 255) g = 255;
+        if(b < 0) b = 0; else if(b > 255) b = 255;
+        if(inv){ r = 255 - r; g = 255 - g; b = 255 - b; }
+        d[j] = r; d[j+1] = g; d[j+2] = b; d[j+3] = 255;
+      }
+    }
+    st.invalidPct = 100 * invalid / n;
+    vctx.putImageData(img, 0, 0);
+    if(!grab) updateStats();
+    return;
+  }
   let vmin = Infinity, vmax = -Infinity, invalid = 0;
   for(let y = 0, i = 0, j = 0; y < ph; y++){
     const mrow = gate ? ((y * maskH / ph) | 0) * maskW : 0;
@@ -484,9 +510,15 @@ function seg(id, attr, onPick){
   });
 }
 seg('#viewSeg', 'view', v => { st.view = v; rerender(); });
-const FLABEL = {gr:'G/R', gbrg:'(G−B)/(R−G)', gsbr:'G/√(B·R)'};
+const FLABEL = {gr:'G/R', gbrg:'(G−B)/(R−G)', gsbr:'G/√(B·R)', affine:'M·[R G B 1]ᵀ'};
 function updateFormula(){ $('#formula').textContent = FLABEL[st.filter]; }
-seg('#filterSeg', 'filter', v => { st.filter = v; updateFormula(); resetEq(); rerender(); });
+seg('#filterSeg', 'filter', v => {
+  st.filter = v; updateFormula(); resetEq();
+  const aff = v === 'affine';
+  $('#contrastCtl').hidden = aff;
+  $('#manualCtl').hidden = aff || st.cmode !== 'manual';
+  rerender();
+});
 seg('#maskSeg', 'mask', async v => {
   st.mask = v; clearMask();
   if(v === 'off'){ setMaskHint('All pixels are processed.'); rerender(); return; }
@@ -526,7 +558,7 @@ $('#saveBtn').addEventListener('click', async () => {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const files = [];
   const outBlob = await toBlob(view);
-  const FNAME = {gr:'GR', gbrg:'GB-RG', gsbr:'G-sqrtBR'};
+  const FNAME = {gr:'GR', gbrg:'GB-RG', gsbr:'G-sqrtBR', affine:'affine'};
   files.push(new File([outBlob], `${st.view === 'processed' ? FNAME[st.filter] : 'rgb'}_${stamp}.png`, {type:'image/png'}));
   if(st.view === 'processed'){
     const rawBlob = await toBlob(work);
