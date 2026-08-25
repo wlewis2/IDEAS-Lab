@@ -582,8 +582,11 @@ $('#saveBtn').addEventListener('click', async () => {
 function showPreview(files, downloaded){
   const box = $('#previewImgs'); box.innerHTML = '';
   files.forEach(f => { const im = document.createElement('img'); im.src = URL.createObjectURL(f); im.alt = f.name; box.appendChild(im); });
-  $('#previewText').textContent = downloaded ? 'Saved to Downloads. If nothing arrived, long-press an image to save it to Photos.'
-                                             : 'Long-press an image to save it to Photos.';
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent);
+  $('#previewText').textContent = downloaded
+    ? (ios ? 'Saved to Files › Downloads. For the photo library, long-press an image and choose “Add to Photos”.'
+           : 'Saved to Downloads — they appear in your Gallery’s Downloads album. Or long-press an image to save it.')
+    : 'Long-press an image to save it to Photos.';
   $('#preview').hidden = false;
 }
 $('#previewClose').addEventListener('click', () => { $('#preview').hidden = true; $('#previewImgs').innerHTML = ''; });

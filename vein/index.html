@@ -791,6 +791,13 @@ $('#saveBtn').addEventListener('click', async () => {
   if(!st.running || !work.width) return;
   const wasFrozen = st.frozen; st.frozen = true;
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  // Start the slow high-res still immediately, in parallel with the canvas blobs, and cap the
+  // wait: the share sheet (the only web route into the Photos/Gallery library) must open while
+  // the tap's user-activation window is still alive, or share() is refused and the files fall
+  // back to plain downloads.
+  const stillP = captureStill();
+  const stillFile = b => b && new File([b], `still_${stamp}.${(b.type || '').includes('png') ? 'png' : 'jpg'}`,
+                                       {type: b.type || 'image/jpeg'});
   const files = [];
   const outBlob = await toBlob(view);
   const VNAME = {enh:'vein-clahe', heq:'vein-heq', vsi:'vsi', cam:'rgb'};
@@ -799,9 +806,16 @@ $('#saveBtn').addEventListener('click', async () => {
     const rawBlob = await toBlob(work);
     files.push(new File([rawBlob], `rgb_${stamp}.png`, {type:'image/png'}));
   }
-  const still = await captureStill();
-  if(still) files.push(new File([still], `still_${stamp}.${(still.type || '').includes('png') ? 'png' : 'jpg'}`,
-                                {type: still.type || 'image/jpeg'}));
+  const still = await Promise.race([stillP, new Promise(r => setTimeout(() => r(null), 1800))]);
+  if(still) files.push(stillFile(still));
+  else stillP.then(late => {                     // still finished too late for the share sheet:
+    const f = stillFile(late);                   // hand it over as a plain download instead
+    if(!f) return;
+    try{
+      const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name;
+      document.body.appendChild(a); a.click(); a.remove();
+    }catch(e){}
+  });
   st.frozen = wasFrozen;
   if(window.claude && typeof window.claude.use === 'function'){
     // Claude Artifact viewer: script-driven downloads are blocked; offer its save prompt,
@@ -832,8 +846,11 @@ $('#saveBtn').addEventListener('click', async () => {
 function showPreview(files, downloaded){
   const box = $('#previewImgs'); box.innerHTML = '';
   files.forEach(f => { const im = document.createElement('img'); im.src = URL.createObjectURL(f); im.alt = f.name; box.appendChild(im); });
-  $('#previewText').textContent = downloaded ? 'Saved to Downloads. If nothing arrived, long-press an image to save it to Photos.'
-                                             : 'Long-press an image to save it to Photos.';
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent);
+  $('#previewText').textContent = downloaded
+    ? (ios ? 'Saved to Files › Downloads. For the photo library, long-press an image and choose “Add to Photos”.'
+           : 'Saved to Downloads — they appear in your Gallery’s Downloads album. Or long-press an image to save it.')
+    : 'Long-press an image to save it to Photos.';
   $('#preview').hidden = false;
 }
 $('#previewClose').addEventListener('click', () => { $('#preview').hidden = true; $('#previewImgs').innerHTML = ''; });
