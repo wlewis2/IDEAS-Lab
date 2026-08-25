@@ -91,13 +91,13 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
     <video id="src" playsinline muted autoplay></video>
     <canvas id="view" width="16" height="9"></canvas>
     <div class="hud">
-      <div class="formula" id="formula">(G−B)/(R−G)</div>
+      <div class="formula" id="formula">M·[R G B 1]ᵀ</div>
       <div class="stats" id="stats">—</div>
     </div>
     <div class="notice" id="notice">
       <div class="card">
         <h1>Erythema Camera</h1>
-        <p id="noticeText">An image processing tool designed to aid in the visualization of redness on the skin. By default, areas of greater erythema are shown with darker pixels. Different varieties of color processing and display options can be found by tapping “Adjust”.</p>
+        <p id="noticeText">An image processing tool designed to aid in the visualization of redness on the skin. By default, an affine color transform highlights areas of greater erythema in red. Different varieties of color processing and display options can be found by tapping “Adjust”.</p>
         <p><button class="btn primary" id="startBtn">Start camera</button></p>
       </div>
     </div>
@@ -124,22 +124,22 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
       <div class="ctl">
         <span class="lbl">Mask</span>
         <div class="seg" id="maskSeg">
-          <button data-mask="off" aria-pressed="false">Off</button>
-          <button data-mask="person" aria-pressed="true">Person</button>
+          <button data-mask="off" aria-pressed="true">Off</button>
+          <button data-mask="person" aria-pressed="false">Person</button>
           <button data-mask="skin" aria-pressed="false">Skin</button>
         </div>
-        <p class="hint" id="maskHint">Only detected person pixels are processed; everything else is dimmed.</p>
+        <p class="hint" id="maskHint">All pixels are processed.</p>
       </div>
       <div class="ctl">
         <span class="lbl">Erythema filter</span>
         <div class="seg" id="filterSeg">
           <button data-filter="gr" aria-pressed="false">G/R</button>
-          <button data-filter="gbrg" aria-pressed="true">(G−B)/(R−G)</button>
+          <button data-filter="gbrg" aria-pressed="false">(G−B)/(R−G)</button>
           <button data-filter="gsbr" aria-pressed="false">G/√(B·R)</button>
-          <button data-filter="affine" aria-pressed="false">Affine</button>
+          <button data-filter="affine" aria-pressed="true">Affine</button>
         </div>
       </div>
-      <div class="ctl" id="contrastCtl">
+      <div class="ctl" id="contrastCtl" hidden>
         <div class="head">
           <span class="lbl">Contrast enhancement</span>
           <div class="seg" id="contrastSeg">
@@ -194,7 +194,7 @@ let raf = 0, needsRender = false;
 
 const st = {
   stream:null, track:null, facing:'environment', mirror:false, running:false, frozen:false,
-  view:'processed', invert:false, invalidPct:0, filter:'gbrg', cmode:'eq', bright:0, contrast:0, torch:false, mask:'person',
+  view:'processed', invert:false, invalidPct:0, filter:'affine', cmode:'eq', bright:0, contrast:0, torch:false, mask:'off',
   fmin:NaN, fmax:NaN, lutReady:false,      // smoothed equalization range + LUT state
   frames:0, fpsT:0, fps:0
 };
