@@ -39,7 +39,6 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .hud .stats{font-family:var(--font-mono);font-size:11px;color:var(--muted);text-align:right;line-height:1.5;
   font-variant-numeric:tabular-nums}
 .hud .stats b{color:var(--text);font-weight:500}
-.hud .stats .warn{color:var(--danger)}
 
 .notice{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;
   background:rgba(10,12,16,.82)}
@@ -80,6 +79,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .ctl .val{font-family:var(--font-mono);font-size:12px;color:var(--text);font-variant-numeric:tabular-nums}
 .ctl input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 .small{font-size:12px;padding:6px 10px;min-height:30px;min-width:0}
+.sub{display:flex;flex-direction:column;gap:10px;padding-top:2px}
 .hint{font-size:12px;color:var(--muted);line-height:1.4;margin:0}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 
@@ -104,8 +104,9 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
       <div class="card">
         <h1>Vein Camera</h1>
         <p id="noticeText">Live vein visualization: the venous spectral index R − x·G, enhanced with contrast-limited
-        adaptive histogram equalization. CLAHE tiles are sized ≈3× the vein width across the vessel and elongated
-        along it, placed from the arm guide, from automatic scene analysis, or manually — see “Adjust”.</p>
+        adaptive histogram equalization. CLAHE tiles are set up automatically from the scene — sized from the
+        detected vein width and elongated along the vein — or manually under “Adjust”. Global equalization and the
+        raw index are available for comparison.</p>
         <div class="actions">
           <button class="btn primary" id="startBtn">Start camera</button>
           <button class="btn" id="openBtn">Open photo</button>
@@ -117,7 +118,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
   <div class="dock">
     <div class="row secondary">
       <div class="seg" id="viewSeg" role="group" aria-label="View">
-        <button data-view="enh" aria-pressed="true">Enhanced</button>
+        <button data-view="enh" aria-pressed="true">CLAHE</button>
+        <button data-view="heq" aria-pressed="false">HEQ</button>
         <button data-view="vsi" aria-pressed="false">VSI</button>
         <button data-view="cam" aria-pressed="false">Camera</button>
       </div>
@@ -134,39 +136,33 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 
     <div class="panel" id="panel" hidden>
       <div class="ctl">
-        <span class="lbl">Tile placement</span>
-        <div class="seg" id="placeSeg">
-          <button data-place="guide" aria-pressed="true">Guide</button>
-          <button data-place="auto" aria-pressed="false">Auto</button>
-          <button data-place="manual" aria-pressed="false">Manual</button>
-        </div>
-        <p class="hint" id="placeHint">Rest the forearm along the guide, edges on the outline; veins run along the
-        dashed line. Vein width is taken as 1/14.4 of the guide width (measured vein-to-forearm ratio).</p>
-      </div>
-      <div class="ctl" id="manualCtl" hidden>
-        <div class="pair">
-          <div class="ctl">
-            <div class="head"><label for="veinW">Vein width</label><span class="val" id="veinWVal">20 px</span></div>
-            <input type="range" id="veinW" min="3" max="60" step="1" value="20">
-          </div>
-          <div class="ctl">
-            <div class="head"><label for="tileA">Tile angle</label><span class="val" id="tileAVal">0°</span></div>
-            <input type="range" id="tileA" min="-90" max="90" step="1" value="0">
-          </div>
-        </div>
-      </div>
-      <div class="ctl">
         <div class="head"><label for="xw">Green weight — R − x·G</label><span class="val" id="xwVal">1.00</span></div>
         <input type="range" id="xw" min="0" max="2" step="0.05" value="1">
       </div>
-      <div class="pair">
-        <div class="ctl">
-          <div class="head"><label for="across">Tile across vein</label><span class="val" id="acrossVal">3.0×W</span></div>
-          <input type="range" id="across" min="1" max="6" step="0.5" value="3">
+      <div class="ctl">
+        <div class="head">
+          <span class="lbl">CLAHE tile settings</span>
+          <button class="btn small" id="tileSetBtn" aria-pressed="false" aria-controls="tileSet">Show</button>
         </div>
-        <div class="ctl">
-          <div class="head"><label for="elong">Elongation along</label><span class="val" id="elongVal">3.0:1</span></div>
-          <input type="range" id="elong" min="1" max="5" step="0.25" value="3">
+        <div class="sub" id="tileSet" hidden>
+          <div class="seg" id="placeSeg">
+            <button data-place="auto" aria-pressed="true">Auto</button>
+            <button data-place="manual" aria-pressed="false">Manual</button>
+          </div>
+          <p class="hint" id="placeHint">Tile orientation and size follow the detected vein direction and width
+          (≈3× vein width across the vessel, 3:1 elongated along it). Falls back to a frame-based default when
+          the signal is weak.</p>
+          <div class="pair" id="manualCtl" hidden>
+            <div class="ctl">
+              <div class="head"><label for="tileW">Tile width</label><span class="val" id="tileWVal">64 px</span></div>
+              <input type="range" id="tileW" min="16" max="400" step="4" value="64">
+            </div>
+            <div class="ctl">
+              <div class="head"><label for="tileH">Tile height</label><span class="val" id="tileHVal">64 px</span></div>
+              <input type="range" id="tileH" min="16" max="400" step="4" value="64">
+            </div>
+          </div>
+          <div class="head"><span class="lbl">Overlay</span><button class="btn small" id="tilesBtn" aria-pressed="false">Show tiles</button></div>
         </div>
       </div>
       <div class="ctl">
@@ -174,13 +170,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
         <input type="range" id="clip" min="0.01" max="0.2" step="0.01" value="0.05">
       </div>
       <div class="ctl">
-        <div class="head">
-          <span class="lbl">Display</span>
-          <div class="group">
-            <button class="btn small" id="tilesBtn" aria-pressed="false">Show tiles</button>
-            <button class="btn small" id="invertBtn" aria-pressed="false">Invert</button>
-          </div>
-        </div>
+        <div class="head"><span class="lbl">Display</span><button class="btn small" id="invertBtn" aria-pressed="false">Invert</button></div>
         <p class="hint">Default: veins darker than skin. Invert to show veins as brighter pixels.</p>
       </div>
       <div class="ctl" id="torchCtl" hidden>
@@ -213,22 +203,23 @@ const small = document.createElement('canvas'), sctx = small.getContext('2d', {w
 const PROC_MAX = 1024;            // long-side cap for the processing canvas
 const NB = 256, NR = 512;         // CLAHE bins / range-stretch histogram bins
 const VEIN_FOREARM = 0.0695;      // median vein/forearm width ratio (forearmRatioAnalysis, n=9)
-const GUIDE_FRAC = 0.58;          // guide band width as a fraction of the frame's short side
+const DEF_FRAC = 0.58;            // assumed forearm fraction of the frame's short side (auto fallback)
+const K_ACROSS = 3, ELONG = 3;    // auto tiles: 3x vein width across the vessel, 3:1 elongated along it
 const SMALL_W = 160;              // analysis downsample width
 const AUTO_MS = 400;              // ms between scene analyses
 const MAX_TILES = 8192;
 
 let vsi = new Float32Array(0), gray = new Uint8Array(0);
 const rangeHist = new Uint32Array(NR), globalHist = new Uint32Array(NB);
-const globalLut = new Uint8Array(NB);
+const globalLut = new Uint8Array(NB), heqLut = new Uint8Array(NB);
 let tileHist = new Uint32Array(0), tileCnt = new Uint32Array(0), tileLut = new Uint8Array(0);
 let raf = 0, needsRender = false;
 
 const st = {
   stream:null, track:null, facing:'environment', mirror:false, running:false, frozen:false, srcMode:'live',
   view:'enh', invert:false, showTiles:false, torch:false,
-  x:1.0, kAcross:3.0, elong:3.0, clip:0.05,
-  place:'guide', manW:20, manA:0,
+  x:1.0, clip:0.05,
+  place:'auto', tileW:0, tileH:0,                   // 0 = manual tiles not yet seeded (square default)
   lo:NaN, hi:NaN,                                   // smoothed stretch range
   aCx:0, aCy:0, autoTheta:NaN, autoW:NaN, autoOk:false, lastAuto:0,
   frames:0, fpsT:0, fps:0
@@ -313,6 +304,7 @@ async function openPhoto(file){
   wctx.drawImage(bmp, 0, 0, work.width, work.height);
   if(bmp.close) bmp.close();
   allocBuffers(); resetEq(); resetAuto();
+  if(st.place === 'auto') analyze();
   $('#notice').hidden = true;
   $('#saveBtn').disabled = false;
   $('#flipBtn').disabled = $('#freezeBtn').disabled = true;
@@ -329,19 +321,19 @@ $('#fileIn').addEventListener('change', e => { openPhoto(e.target.files[0]); e.t
 // theta: vein axis angle (0 = along +x, screen y down); Wv: vein width estimate (px).
 function geometry(){
   const w = work.width, h = work.height;
-  const base = w >= h ? 0 : Math.PI / 2;              // frame long axis
-  let theta, Wv, src = st.place, fallback = false;
+  let theta, tAlong, tAcross;
   if(st.place === 'manual'){
-    theta = st.manA * Math.PI / 180; Wv = st.manW;
-  } else if(st.place === 'auto' && st.autoOk){
-    theta = st.autoTheta; Wv = st.autoW;
+    const def = Math.max(16, Math.round(Math.min(w, h) / 8));   // square tiles, ~8 per short side
+    theta = 0;
+    tAlong = st.tileW || def; tAcross = st.tileH || def;
   } else {
-    if(st.place === 'auto') fallback = true;
-    theta = base; Wv = VEIN_FOREARM * GUIDE_FRAC * Math.min(w, h);
+    let Wv;
+    if(st.autoOk){ theta = st.autoTheta; Wv = st.autoW; }
+    else { theta = w >= h ? 0 : Math.PI / 2; Wv = VEIN_FOREARM * DEF_FRAC * Math.min(w, h); }
+    Wv = Math.min(80, Math.max(3, Wv));
+    tAcross = Math.max(6, K_ACROSS * Wv);
+    tAlong = Math.max(8, ELONG * tAcross);
   }
-  Wv = Math.min(80, Math.max(3, Wv));
-  let tAcross = Math.max(6, st.kAcross * Wv);
-  let tAlong = Math.max(8, st.elong * tAcross);
   // rotated lattice extents
   const cs = Math.cos(theta), sn = Math.sin(theta);
   const Eu = Math.abs(cs) * w / 2 + Math.abs(sn) * h / 2;
@@ -354,7 +346,7 @@ function geometry(){
     nU = Math.max(2, Math.ceil(2 * Eu / tAlong));
     nW = Math.max(2, Math.ceil(2 * Ew / tAcross));
   }
-  return {theta, Wv, tAcross, tAlong, cs, sn, Eu, Ew, nU, nW, src, fallback};
+  return {theta, tAcross, tAlong, cs, sn, Eu, Ew, nU, nW};
 }
 
 /* ---------- scene analysis (auto mode) ---------- */
@@ -566,7 +558,7 @@ function process(grab){
   const w = work.width, h = work.height, n = w * h;
   const g = geometry();
 
-  if(st.view === 'cam'){ vctx.drawImage(work, 0, 0); drawOverlay(g); updateStats(g); return; }
+  if(st.view === 'cam'){ vctx.drawImage(work, 0, 0); drawOverlay(g); updateStats(); return; }
 
   let img;
   try{ img = wctx.getImageData(0, 0, w, h); }catch(e){ return; }
@@ -612,76 +604,55 @@ function process(grab){
       const yv = inv ? 255 - gray[i] : gray[i];
       d[j] = d[j+1] = d[j+2] = yv; d[j+3] = 255;
     }
+  } else if(st.view === 'heq'){
+    // global histogram equalization of the stretched VSI (histeq reference)
+    let cdf = 0, cdfMin = -1;
+    for(let bn = 0; bn < NB; bn++){
+      cdf += globalHist[bn];
+      if(cdfMin < 0 && cdf > 0) cdfMin = cdf;
+      heqLut[bn] = cdfMin < 0 ? 0 : Math.round(255 * (cdf - cdfMin) / Math.max(1, n - cdfMin));
+    }
+    const inv = st.invert;
+    for(let i = 0, j = 0; i < n; i++, j += 4){
+      const yv = inv ? 255 - heqLut[gray[i]] : heqLut[gray[i]];
+      d[j] = d[j+1] = d[j+2] = yv; d[j+3] = 255;
+    }
   } else {
     g.gray = gray;
     runClahe(w, h, g, d, st.invert);
   }
   vctx.putImageData(img, 0, 0);
   drawOverlay(g);
-  updateStats(g);
+  updateStats();
 }
 
 /* ---------- overlay ---------- */
 function drawOverlay(g){
   const w = overlay.width, h = overlay.height;
   octx.clearRect(0, 0, w, h);
-  const S = Math.min(w, h), acc = '#5FB5CC';
-  if(st.showTiles){
-    octx.save();
-    octx.translate(w / 2, h / 2); octx.rotate(g.theta);
-    octx.strokeStyle = 'rgba(95,181,204,0.30)'; octx.lineWidth = 1;
-    const U0 = g.nU * g.tAlong / 2, W0 = g.nW * g.tAcross / 2, D = Math.hypot(w, h) / 2 + 2;
-    octx.beginPath();
-    for(let k = 0; k <= g.nU; k++){ const u = k * g.tAlong - U0; octx.moveTo(u, -D); octx.lineTo(u, D); }
-    for(let k = 0; k <= g.nW; k++){ const wv = k * g.tAcross - W0; octx.moveTo(-D, wv); octx.lineTo(D, wv); }
-    octx.stroke();
-    octx.restore();
-  }
-  if(st.place === 'guide' && st.srcMode === 'live'){
-    const base = w >= h ? 0 : Math.PI / 2;
-    const Lh = Math.max(w, h) * 0.42, hbE = 0.32 * S, hbW = 0.26 * S;   // elbow / wrist half-widths
-    octx.save();
-    octx.translate(w / 2, h / 2); octx.rotate(base);
-    octx.strokeStyle = acc; octx.lineWidth = Math.max(2, S * 0.006);
-    octx.setLineDash([]);
-    octx.beginPath();                                  // tapered band edges (elbow left, wrist right)
-    octx.moveTo(-Lh, -hbE); octx.quadraticCurveTo(0, -(hbE + hbW) / 2 * 0.94, Lh, -hbW);
-    octx.moveTo(-Lh,  hbE); octx.quadraticCurveTo(0,  (hbE + hbW) / 2 * 0.94, Lh,  hbW);
-    octx.stroke();
-    octx.setLineDash([S * 0.03, S * 0.025]);           // vein direction = dashed centerline
-    octx.strokeStyle = 'rgba(95,181,204,0.65)'; octx.lineWidth = Math.max(1.5, S * 0.004);
-    octx.beginPath(); octx.moveTo(-Lh, 0); octx.lineTo(Lh, 0); octx.stroke();
-    octx.setLineDash([]);
-    octx.beginPath();                                  // end ticks: arm continues past the frame
-    for(const ex of [-Lh, Lh]){
-      const hb = ex < 0 ? hbE : hbW;
-      octx.moveTo(ex, -hb - S * 0.02); octx.lineTo(ex, -hb + S * 0.02);
-      octx.moveTo(ex,  hb - S * 0.02); octx.lineTo(ex,  hb + S * 0.02);
-    }
-    octx.strokeStyle = 'rgba(95,181,204,0.65)';
-    octx.stroke();
-    octx.restore();
-  }
-  if(st.place === 'auto'){
-    octx.save();
-    octx.translate(w / 2, h / 2); octx.rotate(g.theta);
-    octx.strokeStyle = g.fallback ? '#E5645A' : acc;
-    octx.lineWidth = Math.max(2, S * 0.005);
-    octx.setLineDash([S * 0.03, S * 0.025]);
-    octx.beginPath(); octx.moveTo(-S * 0.16, 0); octx.lineTo(S * 0.16, 0); octx.stroke();
-    octx.restore();
-  }
+  if(!st.showTiles || st.view === 'heq') return;      // HEQ is global: no tiles to show
+  octx.save();
+  octx.translate(w / 2, h / 2); octx.rotate(g.theta);
+  octx.strokeStyle = 'rgba(95,181,204,0.30)'; octx.lineWidth = 1;
+  const U0 = g.nU * g.tAlong / 2, W0 = g.nW * g.tAcross / 2, D = Math.hypot(w, h) / 2 + 2;
+  octx.beginPath();
+  for(let k = 0; k <= g.nU; k++){ const u = k * g.tAlong - U0; octx.moveTo(u, -D); octx.lineTo(u, D); }
+  for(let k = 0; k <= g.nW; k++){ const wv = k * g.tAcross - W0; octx.moveTo(-D, wv); octx.lineTo(D, wv); }
+  octx.stroke();
+  octx.restore();
 }
 
 /* ---------- HUD ---------- */
-function updateFormula(){ $('#formula').textContent = `CLAHE( R − ${st.x.toFixed(2)}·G )`; }
-function updateStats(g){
-  const deg = Math.round(g.theta * 180 / Math.PI);
+function updateFormula(){
+  const f = `R − ${st.x.toFixed(2)}·G`;
+  $('#formula').textContent =
+    st.view === 'cam' ? 'RGB' :
+    st.view === 'vsi' ? f :
+    st.view === 'heq' ? `HEQ( ${f} )` : `CLAHE( ${f} )`;
+}
+function updateStats(){
   const mode = st.srcMode === 'photo' ? 'photo' : (st.frozen ? 'frozen' : st.fps + ' fps');
-  let s = `${work.width}×${work.height} · <b>${mode}</b><br>` +
-          `W<sub>v</sub> ${g.Wv.toFixed(0)}px · θ ${deg}° · tile ${Math.round(g.tAcross)}×${Math.round(g.tAlong)}px`;
-  if(g.fallback) s += `<br><span class="warn">auto: low signal — using guide geometry</span>`;
-  $('#stats').innerHTML = s;
+  $('#stats').innerHTML = `${work.width}×${work.height} · <b>${mode}</b>`;
 }
 function rerender(){
   if(st.srcMode === 'photo' && st.place === 'auto') analyze();
@@ -704,26 +675,28 @@ function seg(id, attr, onPick){
     onPick(b.dataset[attr]);
   });
 }
-seg('#viewSeg', 'view', v => { st.view = v; rerender(); });
+seg('#viewSeg', 'view', v => { st.view = v; updateFormula(); rerender(); });
 const PLACE_HINT = {
-  guide: 'Rest the forearm along the guide, edges on the outline; veins run along the dashed line. Vein width is taken as 1/14.4 of the guide width (measured vein-to-forearm ratio).',
-  auto:  'Vein orientation comes from the skin-region structure tensor and vein width from the detected forearm width × 0.0695. Falls back to the guide geometry when the signal is weak.',
-  manual:'Set the vein width and tile angle directly. Tile size stays 3× the vein width across the vessel unless you change the multipliers.'
+  auto:  'Tile orientation and size follow the detected vein direction and width (≈3× vein width across the vessel, 3:1 elongated along it). Falls back to a frame-based default when the signal is weak.',
+  manual:'Square tiles by default. Adjust tile width and height in pixels; turn on “Show tiles” to see the grid.'
 };
 seg('#placeSeg', 'place', v => {
-  if(v === 'manual'){
-    const g = geometry();
-    let deg = Math.round(g.theta * 180 / Math.PI);
-    if(deg > 90) deg -= 180; if(deg < -90) deg += 180;
-    st.manW = Math.round(g.Wv); st.manA = deg;
-    $('#veinW').value = st.manW; $('#veinWVal').textContent = st.manW + ' px';
-    $('#tileA').value = deg; $('#tileAVal').textContent = deg + '°';
+  if(v === 'manual' && !st.tileW){                    // first use: seed square tiles, ~8 per short side
+    const def = work.width ? Math.max(16, Math.round(Math.min(work.width, work.height) / 8)) : 64;
+    st.tileW = st.tileH = def;
+    $('#tileW').value = $('#tileH').value = def;
+    $('#tileWVal').textContent = $('#tileHVal').textContent = def + ' px';
   }
   st.place = v;
   $('#manualCtl').hidden = v !== 'manual';
   $('#placeHint').textContent = PLACE_HINT[v];
   if(v === 'auto'){ resetAuto(); if(st.srcMode === 'photo') analyze(); }
   rerender();
+});
+$('#tileSetBtn').addEventListener('click', e => {
+  const p = $('#tileSet'); p.hidden = !p.hidden;
+  e.currentTarget.textContent = p.hidden ? 'Show' : 'Hide';
+  e.currentTarget.setAttribute('aria-pressed', String(!p.hidden));
 });
 function slider(id, valId, key, fmt){
   $(id).addEventListener('input', e => {
@@ -734,11 +707,9 @@ function slider(id, valId, key, fmt){
   });
 }
 slider('#xw', '#xwVal', 'x', v => v.toFixed(2));
-slider('#across', '#acrossVal', 'kAcross', v => v.toFixed(1) + '×W');
-slider('#elong', '#elongVal', 'elong', v => v.toFixed(2).replace(/\.?0+$/, '') + ':1');
 slider('#clip', '#clipVal', 'clip', v => v.toFixed(2));
-slider('#veinW', '#veinWVal', 'manW', v => v.toFixed(0) + ' px');
-slider('#tileA', '#tileAVal', 'manA', v => v.toFixed(0) + '°');
+slider('#tileW', '#tileWVal', 'tileW', v => v.toFixed(0) + ' px');
+slider('#tileH', '#tileHVal', 'tileH', v => v.toFixed(0) + ' px');
 $('#adjustBtn').addEventListener('click', () => {
   const p = $('#panel'); p.hidden = !p.hidden; $('#adjustBtn').setAttribute('aria-pressed', String(!p.hidden));
 });
@@ -769,7 +740,7 @@ $('#saveBtn').addEventListener('click', async () => {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const files = [];
   const outBlob = await toBlob(view);
-  const VNAME = {enh:'vein-clahe', vsi:'vsi', cam:'rgb'};
+  const VNAME = {enh:'vein-clahe', heq:'vein-heq', vsi:'vsi', cam:'rgb'};
   files.push(new File([outBlob], `${VNAME[st.view]}_${stamp}.png`, {type:'image/png'}));
   if(st.view !== 'cam'){
     const rawBlob = await toBlob(work);
