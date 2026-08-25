@@ -115,7 +115,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
     </div>
 
     <div class="row primary">
-      <button class="btn" id="flipBtn" disabled>Flip</button>
+      <div class="group">
+        <button class="btn" id="flipBtn" disabled>Flip cam</button>
+        <button class="btn" id="mirrorBtn" aria-pressed="false" disabled>Mirror</button>
+      </div>
       <button class="shutter" id="saveBtn" aria-label="Save frame" disabled></button>
       <button class="btn" id="freezeBtn" disabled>Freeze</button>
     </div>
@@ -220,10 +223,11 @@ async function start(){
   st.track = st.stream.getVideoTracks()[0];
   const settings = (st.track.getSettings && st.track.getSettings()) || {};
   const facing = settings.facingMode || st.facing;
-  st.mirror = facing === 'user';           // mirror the selfie camera like the native Camera app
+  st.mirror = facing === 'user';           // default: mirror the selfie camera like the native Camera app
+  $('#mirrorBtn').setAttribute('aria-pressed', String(st.mirror));
   setupTrackControls();
   $('#notice').hidden = true;
-  $('#flipBtn').disabled = $('#saveBtn').disabled = $('#freezeBtn').disabled = false;
+  $('#flipBtn').disabled = $('#saveBtn').disabled = $('#freezeBtn').disabled = $('#mirrorBtn').disabled = false;
   st.running = true; st.frozen = false; $('#freezeBtn').textContent = 'Freeze'; $('#freezeBtn').setAttribute('aria-pressed','false');
   resetEq(); clearMask();
   if(st.mask !== 'off') ensureSegmenter(st.mask);
@@ -341,6 +345,14 @@ function grabFrame(pw, ph){
   } else {
     wctx.drawImage(video, 0, 0, pw, ph);
   }
+}
+function remirrorWork(){                     // flip the stored frame so Mirror also works while frozen
+  const t = document.createElement('canvas');
+  t.width = work.width; t.height = work.height;
+  t.getContext('2d').drawImage(work, 0, 0);
+  wctx.save(); wctx.translate(work.width, 0); wctx.scale(-1, 1);
+  wctx.drawImage(t, 0, 0);
+  wctx.restore();
 }
 function process(grab){
   const pw = video.videoWidth, ph = video.videoHeight; if(!pw || !ph) return;
@@ -496,6 +508,12 @@ function rerender(){ if(st.frozen) needsRender = true; }
 /* ---------- controls ---------- */
 $('#startBtn').addEventListener('click', start);
 $('#flipBtn').addEventListener('click', () => { st.facing = st.facing === 'environment' ? 'user' : 'environment'; start(); });
+$('#mirrorBtn').addEventListener('click', e => {
+  st.mirror = !st.mirror;
+  e.currentTarget.setAttribute('aria-pressed', String(st.mirror));
+  if(st.frozen && work.width) remirrorWork();
+  rerender(); updateStats();
+});
 $('#freezeBtn').addEventListener('click', () => {
   st.frozen = !st.frozen; $('#freezeBtn').textContent = st.frozen ? 'Resume' : 'Freeze';
   $('#freezeBtn').setAttribute('aria-pressed', String(st.frozen));
