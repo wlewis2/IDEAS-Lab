@@ -566,7 +566,7 @@ $('#saveBtn').addEventListener('click', async () => {
   }
   st.frozen = wasFrozen;
   if(navigator.canShare && navigator.share && navigator.canShare({files})){
-    try{ await navigator.share({files, title:'Ratio Viewfinder frame'}); return; }
+    try{ await navigator.share({files, title:'Erythema Camera frame'}); return; }
     catch(e){ if(e && e.name === 'AbortError') return; }
   }
   let downloaded = false;
