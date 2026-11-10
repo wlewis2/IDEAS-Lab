@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VeinScope</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07090D">
+<meta name="description" content="Live webcam vein visualization: red minus green, CLAHE, Frangi vesselness, and a fused vein-boost view.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%2307090D'/%3E%3Cpath d='M50 86 C48 62 46 48 38 20 M50 86 C52 60 56 50 70 28 M50 64 C42 56 38 52 28 46' fill='none' stroke='%235FD0E6' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --ground:#07090D; --glass:rgba(22,27,35,.72); --glass-2:rgba(38,45,57,.7); --line:rgba(255,255,255,.09);
+  --text:#EEF2F6; --muted:#8C97A6; --accent:#5FD0E6; --accent-2:#7B8CFF; --accent-ink:#04161B; --danger:#F0776C;
+  --font-ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:var(--ground);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased;overscroll-behavior:none}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{position:fixed;inset:0;display:flex;flex-direction:column;
+  background:
+    radial-gradient(900px 500px at 15% -10%,rgba(95,208,230,.10),transparent 60%),
+    radial-gradient(800px 500px at 100% 110%,rgba(123,140,255,.10),transparent 60%),
+    var(--ground)}
+
+/* top bar */
+.top{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:calc(env(safe-area-inset-top,0px) + 14px) 20px 6px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand svg{flex:0 0 auto}
+.brand .name{font-weight:650;font-size:16px;letter-spacing:-.01em}
+.chip{font-family:var(--font-mono);font-size:12px;color:var(--accent);background:rgba(95,208,230,.09);
+  border:1px solid rgba(95,208,230,.22);border-radius:999px;padding:4px 10px;white-space:nowrap}
+.stats{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.stats b{color:var(--text);font-weight:500}
+.live{display:inline-block;width:7px;height:7px;border-radius:50%;background:#49D07F;margin-right:7px;
+  box-shadow:0 0 0 3px rgba(73,208,127,.18);vertical-align:1px}
+.live.off{background:#E6B450;box-shadow:0 0 0 3px rgba(230,180,80,.18)}
+
+/* stage */
+.stage{position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;padding:8px 20px}
+.frame{position:relative;border-radius:18px;overflow:hidden;background:#000;
+  box-shadow:0 0 0 1px var(--line),0 30px 80px -20px rgba(0,0,0,.8),0 0 120px -40px rgba(95,208,230,.35)}
+#view{display:block;width:100%;height:100%}
+#src{position:absolute;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none;object-fit:cover}
+#src.pip{left:14px;top:14px;width:24%;height:auto;min-width:120px;opacity:1;border-radius:10px;
+  box-shadow:0 0 0 1px rgba(255,255,255,.25),0 10px 30px rgba(0,0,0,.6)}
+#src.mirror{transform:scaleX(-1)}
+.caption{position:absolute;left:0;right:0;bottom:0;padding:26px 16px 12px;font-size:12.5px;color:rgba(238,242,246,.85);
+  background:linear-gradient(transparent,rgba(0,0,0,.6));pointer-events:none;text-align:center;text-wrap:balance}
+.piplabel{position:absolute;left:22px;top:20px;font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;
+  color:#fff;text-shadow:0 1px 3px #000;pointer-events:none}
+.frozen{position:absolute;right:14px;top:14px;font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;
+  background:rgba(230,180,80,.92);color:#221803;border-radius:6px;padding:3px 8px}
+
+/* dock */
+.dockwrap{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding:6px 14px calc(env(safe-area-inset-bottom,0px) + 16px);position:relative}
+.dock{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;
+  background:var(--glass);border:1px solid var(--line);border-radius:20px;padding:8px;
+  -webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);
+  box-shadow:0 18px 50px -18px rgba(0,0,0,.8)}
+.modes{display:flex;gap:4px;background:rgba(0,0,0,.28);border-radius:14px;padding:4px}
+.modes button{border:0;background:transparent;border-radius:11px;padding:9px 16px;font-size:14px;font-weight:550;
+  color:var(--muted);display:flex;align-items:center;gap:7px;white-space:nowrap}
+.modes button:hover{color:var(--text)}
+.modes button[aria-pressed="true"]{background:var(--glass-2);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
+.modes button.boost[aria-pressed="true"]{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:var(--accent-ink);box-shadow:0 6px 22px -6px rgba(95,208,230,.7)}
+.modes kbd{font-family:var(--font-mono);font-size:10px;opacity:.5;font-weight:400}
+.sep{width:1px;height:26px;background:var(--line)}
+.tools{display:flex;gap:4px}
+.tool{border:0;background:transparent;border-radius:11px;width:40px;height:40px;display:grid;place-items:center;color:var(--muted)}
+.tool:hover{background:rgba(255,255,255,.06);color:var(--text)}
+.tool[aria-pressed="true"]{background:rgba(95,208,230,.14);color:var(--accent)}
+.tool:disabled{opacity:.35;cursor:default}
+.tool svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* settings */
+.panel{position:absolute;bottom:calc(100% + 4px);right:max(14px,calc(50% - 330px));width:min(320px,calc(100vw - 28px));
+  background:rgba(18,22,29,.92);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px;
+  -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);box-shadow:0 24px 60px -12px rgba(0,0,0,.85);z-index:5}
+.ctl{display:flex;flex-direction:column;gap:7px}
+.ctl .head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.ctl label,.ctl .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.ctl .val{font-family:var(--font-mono);font-size:12px;font-variant-numeric:tabular-nums}
+.ctl input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+.ctl select{background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;width:100%}
+.switch{border:1px solid var(--line);background:rgba(255,255,255,.06);border-radius:8px;padding:5px 10px;font-size:12px}
+.switch[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.hint{font-size:11.5px;color:var(--muted);line-height:1.45;margin:0}
+
+/* start card */
+.notice{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;z-index:8;
+  background:rgba(7,9,13,.6);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.card{max-width:420px;width:100%;background:rgba(22,27,35,.9);border:1px solid var(--line);border-radius:22px;padding:30px 26px;text-align:center;
+  box-shadow:0 40px 100px -20px rgba(0,0,0,.9),0 0 140px -50px rgba(95,208,230,.5)}
+.card h1{font-size:24px;margin:14px 0 8px;font-weight:680;letter-spacing:-.02em}
+.card p{margin:0 0 20px;color:var(--muted);font-size:14.5px;line-height:1.5;text-wrap:pretty}
+.card p.err{color:var(--danger)}
+.cta{border:0;border-radius:13px;padding:13px 26px;font-size:15px;font-weight:650;color:var(--accent-ink);
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 10px 30px -8px rgba(95,208,230,.7)}
+.cta:hover{filter:brightness(1.08)}
+.card small{display:block;margin-top:16px;color:var(--muted);font-size:12px}
+
+@media (max-width:640px){
+  .top{padding-left:14px;padding-right:14px}
+  .stats .res{display:none}
+  .stage{padding:6px 10px}
+  .modes button{padding:9px 11px;font-size:13px}
+  .modes kbd{display:none}
+  .sep{display:none}
+  .panel{right:14px}
+}
+@media (prefers-reduced-motion:no-preference){
+  .modes button,.tool,.switch{transition:background-color .15s,color .15s,box-shadow .15s}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="24" fill="#10151C"/><path d="M50 86 C48 62 46 48 38 20 M50 86 C52 60 56 50 70 28 M50 64 C42 56 38 52 28 46" fill="none" stroke="#5FD0E6" stroke-width="8" stroke-linecap="round"/></svg>
+      <span class="name">VeinScope</span>
+      <span class="chip" id="formula">R − G</span>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <main class="stage" id="stage">
+    <div class="frame" id="frame" hidden>
+      <canvas id="view" width="16" height="9"></canvas>
+      <video id="src" playsinline muted autoplay></video>
+      <span class="piplabel" id="pipLabel" hidden>ORIGINAL</span>
+      <span class="frozen" id="frozenTag" hidden>FROZEN</span>
+      <div class="caption" id="caption"></div>
+    </div>
+    <div class="notice" id="notice">
+      <div class="card">
+        <svg width="54" height="54" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="24" fill="#10151C"/><path d="M50 86 C48 62 46 48 38 20 M50 86 C52 60 56 50 70 28 M50 64 C42 56 38 52 28 46" fill="none" stroke="#5FD0E6" stroke-width="8" stroke-linecap="round"/></svg>
+        <h1>VeinScope</h1>
+        <p id="noticeText">Live vein visualization from an ordinary webcam. The red-minus-green channel difference
+        brings out superficial veins; refine it with CLAHE, Frangi vesselness, or the fused Vein Boost view.</p>
+        <button class="cta" id="startBtn">Enable camera</button>
+        <small>Video is processed entirely in your browser. Nothing is uploaded.</small>
+      </div>
+    </div>
+  </main>
+
+  <div class="dockwrap">
+    <div class="panel" id="panel" hidden>
+      <div class="ctl">
+        <div class="head"><label for="clip">CLAHE clip limit</label><span class="val" id="clipVal"></span></div>
+        <input type="range" id="clip" min="0.005" max="0.2" step="0.005">
+      </div>
+      <div class="ctl">
+        <div class="head"><label for="sigma">Vein scale (Frangi σ)</label><span class="val" id="sigmaVal"></span></div>
+        <input type="range" id="sigma" min="1" max="6" step="0.25">
+      </div>
+      <div class="ctl">
+        <div class="head"><label for="gain">Vein Boost emphasis</label><span class="val" id="gainVal"></span></div>
+        <input type="range" id="gain" min="0" max="1" step="0.05">
+      </div>
+      <div class="ctl">
+        <div class="head"><span class="lbl">Mirror image</span><button class="switch" id="mirrorBtn" aria-pressed="false">Off</button></div>
+      </div>
+      <div class="ctl" id="camCtl" hidden>
+        <label for="camSel">Camera</label>
+        <select id="camSel"></select>
+      </div>
+      <p class="hint">Tip: even, diffuse light and a steady forearm 20–40 cm from the camera give the cleanest maps.
+      Keys: 1–4 views · Space freeze · S save · I invert · O original.</p>
+    </div>
+    <div class="dock">
+      <div class="modes" id="modes" role="group" aria-label="Processing">
+        <button data-mode="raw" aria-pressed="true">R − G <kbd>1</kbd></button>
+        <button data-mode="clahe" aria-pressed="false">CLAHE <kbd>2</kbd></button>
+        <button data-mode="frangi" aria-pressed="false">Frangi <kbd>3</kbd></button>
+        <button data-mode="boost" class="boost" aria-pressed="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5l-2.2-6.3L3.5 10l6.3-1.7z"/></svg>
+          Vein Boost <kbd>4</kbd></button>
+      </div>
+      <span class="sep"></span>
+      <div class="tools">
+        <button class="tool" id="pipBtn" aria-pressed="false" title="Show original camera (O)" aria-label="Show original camera" disabled>
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><rect x="6" y="8" width="7" height="5" rx="1"/></svg></button>
+        <button class="tool" id="invertBtn" aria-pressed="false" title="Invert (I)" aria-label="Invert" disabled>
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 000-17z" fill="currentColor"/></svg></button>
+        <button class="tool" id="freezeBtn" aria-pressed="false" title="Freeze (Space)" aria-label="Freeze" disabled>
+          <svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button>
+        <button class="tool" id="saveBtn" title="Save image (S)" aria-label="Save image" disabled>
+          <svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"/></svg></button>
+        <button class="tool" id="setBtn" aria-pressed="false" aria-controls="panel" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 12h3M11 12h9M4 17h12M20 17h0"/><circle cx="16" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="18" cy="17" r="2"/></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/*CORE-START*/
+// Pure image-processing core (no DOM). run(rgba, opts) rewrites the RGBA buffer in place.
+const Core = (() => {
+  const NB = 256, NS = 3;
+  const P = {                       // tuning constants
+    bgFrac: 0.07,                   // illumination-flattening blur sigma, fraction of short side
+    cK: 1.1, cFloor: 0.5,           // Frangi structure sensitivity: c = max(cFloor, cK * rms Hessian norm)
+    beta2: 2 * 0.5 * 0.5,           // Frangi 2*beta^2
+    lcnGain: 62,                    // Vein Boost local-contrast gain (gray levels per local sigma)
+    motion: 14                      // temporal denoise: R-G change treated as real motion
+  };
+  let W = 0, H = 0, N = 0;
+  let v, vt, lum, mask, maskF, inner, tA, b1, b2, b3, flat, ves, gray, enh, lamA, lamB;
+  let haveVt = false, lo = NaN, hi = NaN, cEma = NaN;
+  const hist = new Uint32Array(511);
+  let tileHist = new Uint32Array(0), tileLut = new Uint8Array(0);
+  let cx0, cx1, cxt, cy0, cy1, cyt, cxi, cyi, nX = 0, nY = 0;
+  const lutRb = new Float32Array(257), lutS = new Float32Array(1025);
+  for (let i = 0; i <= 256; i++) lutRb[i] = Math.exp(-(i / 256) / P.beta2);
+  for (let i = 0; i <= 1024; i++) lutS[i] = 1 - Math.exp(-(i / 1024) * 8);
+
+  function alloc(w, h) {
+    if (w === W && h === H) return;
+    W = w; H = h; N = w * h;
+    const f = () => new Float32Array(N);
+    v = f(); vt = f(); mask = f(); maskF = f(); inner = f(); tA = f(); b1 = f(); b2 = f(); b3 = f(); flat = f(); ves = f();
+    lum = new Uint8Array(N); gray = new Uint8Array(N); enh = new Uint8Array(N);
+    lamA = []; lamB = [];
+    for (let s = 0; s < NS; s++) { lamA.push(f()); lamB.push(f()); }
+    // CLAHE lattice: ~8 tiles along the long side, near-square tiles
+    const ts = Math.max(w, h) / 8;
+    nX = Math.max(2, Math.round(w / ts)); nY = Math.max(2, Math.round(h / ts));
+    tileHist = new Uint32Array(nX * nY * NB); tileLut = new Uint8Array(nX * nY * NB);
+    const tab = (len, n) => {
+      const i0 = new Uint16Array(len), i1 = new Uint16Array(len), t = new Float32Array(len), ix = new Uint16Array(len);
+      for (let p = 0; p < len; p++) {
+        ix[p] = Math.min(n - 1, (p * n / len) | 0);
+        const fp = (p + 0.5) * n / len - 0.5;
+        if (fp <= 0) { i0[p] = i1[p] = 0; t[p] = 0; }
+        else if (fp >= n - 1) { i0[p] = i1[p] = n - 1; t[p] = 0; }
+        else { i0[p] = fp | 0; i1[p] = i0[p] + 1; t[p] = fp - i0[p]; }
+      }
+      return [i0, i1, t, ix];
+    };
+    [cx0, cx1, cxt, cxi] = tab(w, nX); [cy0, cy1, cyt, cyi] = tab(h, nY);
+    reset();
+  }
+  function reset() { haveVt = false; lo = hi = NaN; cEma = NaN; }
+
+  /* ---- Gaussian blur as three box passes (cost independent of sigma) ---- */
+  function boxH(src, dst, r) {
+    if (r > (W - 1) >> 1) r = (W - 1) >> 1;
+    if (r < 1) { dst.set(src); return; }
+    const ia = 1 / (r + r + 1);
+    for (let y = 0; y < H; y++) {
+      let ti = y * W, li = ti, ri = ti + r;
+      const fv = src[ti], lv = src[ti + W - 1];
+      let val = (r + 1) * fv;
+      for (let j = 0; j < r; j++) val += src[ti + j];
+      for (let j = 0; j <= r; j++) { val += src[ri++] - fv; dst[ti++] = val * ia; }
+      for (let j = r + 1; j < W - r; j++) { val += src[ri++] - src[li++]; dst[ti++] = val * ia; }
+      for (let j = W - r; j < W; j++) { val += lv - src[li++]; dst[ti++] = val * ia; }
+    }
+  }
+  function boxV(src, dst, r) {
+    if (r > (H - 1) >> 1) r = (H - 1) >> 1;
+    if (r < 1) { dst.set(src); return; }
+    const ia = 1 / (r + r + 1);
+    for (let x = 0; x < W; x++) {
+      let ti = x, li = ti, ri = ti + r * W;
+      const fv = src[ti], lv = src[ti + W * (H - 1)];
+      let val = (r + 1) * fv;
+      for (let j = 0; j < r; j++) val += src[ti + j * W];
+      for (let j = 0; j <= r; j++) { val += src[ri] - fv; dst[ti] = val * ia; ri += W; ti += W; }
+      for (let j = r + 1; j < H - r; j++) { val += src[ri] - src[li]; dst[ti] = val * ia; li += W; ri += W; ti += W; }
+      for (let j = H - r; j < H; j++) { val += lv - src[li]; dst[ti] = val * ia; li += W; ti += W; }
+    }
+  }
+  function gauss(src, dst, sigma) {             // dst may alias src; uses tA
+    const n = 3, wi = Math.sqrt(12 * sigma * sigma / n + 1);
+    let wl = Math.floor(wi); if (wl % 2 === 0) wl--;
+    const m = Math.round((12 * sigma * sigma - n * wl * wl - 4 * n * wl - 3 * n) / (-4 * wl - 4));
+    let s = src;
+    for (let k = 0; k < n; k++) {
+      const r = ((k < m ? wl : wl + 2) - 1) >> 1;
+      boxH(s, tA, r); boxV(tA, dst, r); s = dst;
+    }
+  }
+
+  /* ---- CLAHE (MATLAB adapthisteq clip semantics, bilinear tile blending) ---- */
+  function buildLut(hs, off, nPix, clipNorm, out) {
+    const minClip = Math.ceil(nPix / NB);
+    const clip = minClip + Math.round(clipNorm * Math.max(0, nPix - minClip));
+    let excess = 0;
+    for (let b = 0; b < NB; b++) { const e = hs[off + b] - clip; if (e > 0) { excess += e; hs[off + b] = clip; } }
+    const add = (excess / NB) | 0; let rem = excess - add * NB, cdf = 0;
+    for (let b = 0; b < NB; b++) {
+      let hv = hs[off + b] + add; if (rem > 0) { hv++; rem--; }
+      cdf += hv; out[off + b] = Math.round(255 * cdf / nPix);
+    }
+  }
+  function clahe(src, dst, clipNorm) {
+    const nT = nX * nY;
+    tileHist.fill(0);
+    const cnt = new Uint32Array(nT);
+    for (let y = 0, i = 0; y < H; y++) {
+      const row = cyi[y] * nX;
+      for (let x = 0; x < W; x++, i++) { const t = row + cxi[x]; tileHist[t * NB + src[i]]++; cnt[t]++; }
+    }
+    for (let t = 0; t < nT; t++) buildLut(tileHist, t * NB, Math.max(1, cnt[t]), clipNorm, tileLut);
+    for (let y = 0, i = 0; y < H; y++) {
+      const r0 = cy0[y] * nX, r1 = cy1[y] * nX, ty = cyt[y];
+      for (let x = 0; x < W; x++, i++) {
+        const g = src[i], a = cx0[x], b = cx1[x], tx = cxt[x];
+        const l00 = tileLut[(r0 + a) * NB + g], l10 = tileLut[(r0 + b) * NB + g];
+        const l01 = tileLut[(r1 + a) * NB + g], l11 = tileLut[(r1 + b) * NB + g];
+        const top = l00 + (l10 - l00) * tx, bot = l01 + (l11 - l01) * tx;
+        dst[i] = top + (bot - top) * ty;
+      }
+    }
+  }
+
+  /* ---- multiscale Frangi vesselness for dark tubular structures ---- */
+  function frangi(src, sig0, out) {
+    let sum = 0, cnt = 0;
+    for (let s = 0; s < NS; s++) {
+      const sg = sig0 * Math.pow(1.5, s), s2 = sg * sg, A = lamA[s], B = lamB[s];
+      gauss(src, b1, sg);
+      for (let y = 1; y < H - 1; y++) {
+        for (let x = 1, i = y * W + 1; x < W - 1; x++, i++) {
+          const c = b1[i];
+          const hxx = (b1[i + 1] - 2 * c + b1[i - 1]) * s2;
+          const hyy = (b1[i + W] - 2 * c + b1[i - W]) * s2;
+          const hxy = (b1[i + W + 1] - b1[i + W - 1] - b1[i - W + 1] + b1[i - W - 1]) * 0.25 * s2;
+          const tr = hxx + hyy, df = hxx - hyy, rt = Math.sqrt(df * df + 4 * hxy * hxy);
+          const e1 = 0.5 * (tr + rt), e2 = 0.5 * (tr - rt);     // e1 >= e2
+          A[i] = e1; B[i] = e2;
+          if (inner[i] > 0.97) { sum += e1 * e1 + e2 * e2; cnt++; }
+        }
+      }
+    }
+    const c = Math.max(P.cFloor, P.cK * Math.sqrt(sum / Math.max(1, cnt)));
+    cEma = cEma === cEma ? cEma + (c - cEma) * 0.2 : c;
+    const kS = 1024 / 8 / (2 * cEma * cEma);
+    out.fill(0);
+    for (let s = 0; s < NS; s++) {
+      const A = lamA[s], B = lamB[s];
+      for (let y = 1; y < H - 1; y++) {
+        for (let x = 1, i = y * W + 1; x < W - 1; x++, i++) {
+          const e1 = A[i], e2 = B[i];
+          if (e1 <= 0 || e1 < -e2) continue;                    // need a dominant positive curvature (dark ridge)
+          const rb = e2 / e1;
+          let si = ((e1 * e1 + e2 * e2) * kS) | 0; if (si > 1024) si = 1024;
+          const val = lutRb[(rb * rb * 256) | 0] * lutS[si];
+          if (val > out[i]) out[i] = val;
+        }
+      }
+    }
+  }
+
+  function skinLike(R, G, B) {
+    const rg = R - G;
+    return rg > 5 && rg < 135 && R > 40 && R * 10 > B * 9 && !(R > 248 && G > 240 && B > 235);
+  }
+
+  // display window: robust percentiles of the (integer) R-G values, over skin when detected
+  function windowRange(maskOk) {
+    hist.fill(0);
+    let n = 0;
+    if (maskOk) { for (let i = 0; i < N; i++) if (maskF[i] > 0.5) { hist[(v[i] + 255) | 0]++; n++; } }
+    else { for (let i = 0; i < N; i++) hist[(v[i] + 255) | 0]++; n = N; }
+    const t0 = n * 0.005, t1 = n * 0.995;
+    let acc = 0, a = 0, b = 510;
+    for (let k = 0; k < 511; k++) { acc += hist[k]; if (acc >= t0) { a = k; break; } }
+    acc = 0;
+    for (let k = 0; k < 511; k++) { acc += hist[k]; if (acc >= t1) { b = k; break; } }
+    let l = a - 255 - 0.5, h = b - 255 + 0.5; if (h - l < 4) { l -= 2; h += 2; }
+    if (lo !== lo) { lo = l; hi = h; } else { lo += (l - lo) * 0.25; hi += (h - hi) * 0.25; }
+  }
+
+  // Skin-normalized illumination flattening: flat = smooth(src) - localMean_skin(src), 0 off-skin.
+  // Removing the arm/background step first keeps Frangi from firing along the arm outline.
+  // Leaves b3 = local skin weight, inner = soft interior weight, mask = binary skin.
+  function flatten(src, maskOk, sSmooth) {
+    const sL = Math.max(6, P.bgFrac * Math.min(W, H));
+    if (maskOk) { for (let i = 0; i < N; i++) { const m = maskF[i] > 0.5 ? 1 : 0; mask[i] = m; b2[i] = src[i] * m; } }
+    else { mask.fill(1); b2.set(src); }
+    gauss(b2, b2, sL);
+    gauss(mask, b3, sL);
+    gauss(mask, inner, 4);
+    gauss(src, b1, sSmooth);
+    for (let i = 0; i < N; i++) flat[i] = mask[i] ? b1[i] - b2[i] / Math.max(b3[i], 1e-3) : 0;
+    return sL;
+  }
+
+  function run(d, o) {
+    // R-G, luminance, skin mask
+    for (let i = 0, j = 0; i < N; i++, j += 4) {
+      const R = d[j], G = d[j + 1], B = d[j + 2];
+      v[i] = R - G; lum[i] = (R * 77 + G * 150 + B * 29) >> 8;
+      mask[i] = skinLike(R, G, B) ? 1 : 0;
+    }
+    gauss(mask, maskF, 2.5);
+    let sc = 0; for (let i = 0; i < N; i++) if (maskF[i] > 0.5) sc++;
+    const maskOk = sc > 0.08 * N;
+    const inv = o.invert;
+
+    if (o.mode === 'raw' || o.mode === 'clahe') {
+      windowRange(maskOk);
+      const k = 255 / (hi - lo);
+      for (let i = 0; i < N; i++) { let q = (v[i] - lo) * k; gray[i] = q < 0 ? 0 : q > 255 ? 255 : q; }
+      let out = gray;
+      if (o.mode === 'clahe') { clahe(gray, enh, o.clip); out = enh; }
+      for (let i = 0, j = 0; i < N; i++, j += 4) {
+        const g = inv ? 255 - out[i] : out[i];
+        d[j] = d[j + 1] = d[j + 2] = g; d[j + 3] = 255;
+      }
+      return { maskOk };
+    }
+
+    if (o.mode === 'frangi') {
+      flatten(v, maskOk, 0.8);
+      frangi(flat, o.sigma, ves);
+      for (let i = 0, j = 0; i < N; i++, j += 4) {
+        let wv = (inner[i] - 0.93) * 16; wv = wv < 0 ? 0 : wv > 1 ? 1 : wv;
+        const t = ves[i] * wv;
+        const u = Math.sqrt(t);
+        let r = 255 * t * u, g = 255 * u * (0.45 + 0.55 * t), b = 255 * u * (0.62 + 0.38 * t);
+        if (inv) { r = 255 - r; g = 255 - g; b = 255 - b; }
+        d[j] = r; d[j + 1] = g; d[j + 2] = b; d[j + 3] = 255;
+      }
+      return { maskOk };
+    }
+
+    /* ---- Vein Boost ---- */
+    // 1. motion-adaptive temporal denoise of R-G (chroma noise is the limiting factor on webcams)
+    if (!haveVt) { vt.set(v); haveVt = true; }
+    else {
+      const m2 = 1 / (P.motion * P.motion);
+      for (let i = 0; i < N; i++) {
+        const df = v[i] - vt[i]; let a = 0.22 + df * df * m2; if (a > 1) a = 1;
+        vt[i] += df * a;
+      }
+    }
+    // 2. skin-normalized illumination flattening
+    const sL = flatten(vt, maskOk, 1.4);
+    // 3. local contrast normalization
+    let sdSum = 0, sdN = 0;
+    for (let i = 0; i < N; i++) b2[i] = flat[i] * flat[i];
+    gauss(b2, b2, sL);
+    for (let i = 0; i < N; i++) {
+      const sd = Math.sqrt(b2[i] / Math.max(b3[i], 1e-3)); b2[i] = sd;
+      if (mask[i]) { sdSum += sd; sdN++; }
+    }
+    const sdMean = sdSum / Math.max(1, sdN) + 0.25;
+    // 4. vesselness of the flattened signal
+    frangi(flat, o.sigma, ves);
+    // 5. fuse: normalized map darkened and tinted along detected vessels; non-skin dimmed
+    const G = P.lcnGain, gain = o.gain;
+    for (let i = 0, j = 0; i < N; i++, j += 4) {
+      let w = (inner[i] - 0.55) * 3.3; w = w < 0 ? 0 : w > 1 ? 1 : w;
+      const bgv = lum[i] * 0.28;
+      let r, g, b;
+      if (w > 0) {
+        let q = 150 + G * flat[i] / (0.5 * b2[i] + 0.5 * sdMean);
+        q = q < 0 ? 0 : q > 255 ? 255 : q;
+        let wv = (inner[i] - 0.93) * 16; wv = wv < 0 ? 0 : wv > 1 ? 1 : wv;
+        const t = ves[i] * wv, k = 1 - gain * t;
+        if (inv) { q = 255 - q * k; r = q * (1 - 0.75 * gain * t); g = q; b = q; }
+        else { q *= k; r = q * (1 - 0.6 * gain * t); g = q * (1 - 0.12 * gain * t); b = q + 40 * gain * t; }
+        r = bgv + (r - bgv) * w; g = bgv + (g - bgv) * w; b = bgv + (b - bgv) * w;
+      } else { r = g = b = bgv; }
+      d[j] = r; d[j + 1] = g; d[j + 2] = b; d[j + 3] = 255;
+    }
+    return { maskOk };
+  }
+  return { alloc, reset, run, P };
+})();
+/*CORE-END*/
+
+(function () {
+'use strict';
+const $ = s => document.querySelector(s);
+const video = $('#src'), view = $('#view'), vctx = view.getContext('2d');
+const frame = $('#frame'), stage = $('#stage');
+const work = document.createElement('canvas'), wctx = work.getContext('2d', { willReadFrequently: true });
+const PROC_MAX = 640;               // long-side processing resolution (matches 720p chroma resolution)
+
+const st = { stream: null, track: null, deviceId: null, running: false, frozen: false, mirror: true,
+  mode: 'raw', invert: false, pip: false, clip: 0.05, sigma: 2.5, gain: 0.7,
+  frames: 0, fpsT: 0, fps: 0, ms: 0, dirty: false };
+let raf = 0, held = null;
+
+const INFO = {
+  raw:    ['R − G', 'Raw red-minus-green difference, contrast-stretched. Veins appear darker than surrounding skin.'],
+  clahe:  ['CLAHE( R − G )', 'Contrast-limited adaptive histogram equalization — boosts local vein contrast across uneven lighting.'],
+  frangi: ['Frangi( R − G )', 'Multiscale Hessian vesselness — highlights dark tubular structures, suppresses blobs and flat skin.'],
+  boost:  ['Vein Boost', 'Temporal denoise → illumination flattening → local contrast normalization, fused with Frangi vesselness on skin only.']
+};
+
+/* ---------- camera ---------- */
+async function start() {
+  if (!window.isSecureContext) return fail('This page must be served over HTTPS (or localhost) for the camera to work.');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return fail('This browser does not expose the camera API.');
+  stopStream();
+  const vc = st.deviceId ? { deviceId: { exact: st.deviceId } } : { facingMode: { ideal: 'environment' } };
+  vc.width = { ideal: 1280 }; vc.height = { ideal: 720 };
+  try { st.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: vc }); }
+  catch (e) {
+    if (st.deviceId) { st.deviceId = null; return start(); }
+    return fail(e && e.name === 'NotAllowedError' ? 'Camera access was blocked. Allow the camera for this site in your browser’s address bar, then try again.'
+      : e && e.name === 'NotFoundError' ? 'No camera was found on this device.'
+      : 'Could not open the camera: ' + (e && e.message || e));
+  }
+  video.srcObject = st.stream;
+  try { await video.play(); } catch (e) {}
+  st.track = st.stream.getVideoTracks()[0];
+  const s = (st.track.getSettings && st.track.getSettings()) || {};
+  setMirror(s.facingMode !== 'environment');
+  listCameras();
+  $('#notice').hidden = true; frame.hidden = false;
+  ['#pipBtn', '#invertBtn', '#freezeBtn', '#saveBtn'].forEach(id => $(id).disabled = false);
+  st.running = true; setFrozen(false); Core.reset();
+  cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
+}
+function fail(msg) {
+  const t = $('#noticeText'); t.textContent = msg; t.classList.add('err');
+  $('#notice').hidden = false; $('#startBtn').textContent = 'Try again';
+}
+function stopStream() { if (st.stream) { st.stream.getTracks().forEach(t => t.stop()); st.stream = null; st.track = null; } }
+async function listCameras() {
+  let devs = [];
+  try { devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput'); } catch (e) {}
+  const sel = $('#camSel'); sel.innerHTML = '';
+  const cur = st.track && st.track.getSettings ? st.track.getSettings().deviceId : '';
+  devs.forEach((dv, i) => {
+    const o = document.createElement('option'); o.value = dv.deviceId; o.textContent = dv.label || 'Camera ' + (i + 1);
+    sel.appendChild(o);
+  });
+  if (cur) sel.value = cur;
+  $('#camCtl').hidden = devs.length < 2;
+}
+
+/* ---------- loop ---------- */
+function fit() {
+  const w = view.width, h = view.height; if (!w || !h) return;
+  const cs = getComputedStyle(stage);
+  const aw = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const ah = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const k = Math.min(aw / w, ah / h);
+  frame.style.width = Math.max(1, Math.floor(w * k)) + 'px'; frame.style.height = Math.max(1, Math.floor(h * k)) + 'px';
+}
+window.addEventListener('resize', fit);
+function loop(ts) {
+  if (!st.running) return;
+  if (video.readyState >= 2 && video.videoWidth) {
+    if (!st.frozen) { render(true); tick(ts); }
+    else if (st.dirty) render(false);
+  }
+  raf = requestAnimationFrame(loop);
+}
+function tick(ts) {
+  st.frames++; if (!st.fpsT) st.fpsT = ts;
+  if (ts - st.fpsT >= 1000) { st.fps = Math.round(st.frames * 1000 / (ts - st.fpsT)); st.frames = 0; st.fpsT = ts; stats(); }
+}
+function render(grab) {
+  st.dirty = false;
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const s = Math.min(1, PROC_MAX / Math.max(vw, vh));
+  const pw = Math.max(2, Math.round(vw * s)), ph = Math.max(2, Math.round(vh * s));
+  if (work.width !== pw || work.height !== ph) {
+    work.width = view.width = pw; work.height = view.height = ph; held = null; fit();
+    if (!grab) return;
+  }
+  Core.alloc(pw, ph);
+  const t0 = performance.now();
+  if (grab || !held) {
+    if (st.mirror) { wctx.save(); wctx.translate(pw, 0); wctx.scale(-1, 1); wctx.drawImage(video, 0, 0, pw, ph); wctx.restore(); }
+    else wctx.drawImage(video, 0, 0, pw, ph);
+    try { held = wctx.getImageData(0, 0, pw, ph); } catch (e) { return; }
+  }
+  const img = new ImageData(new Uint8ClampedArray(held.data), pw, ph);
+  Core.run(img.data, st);
+  vctx.putImageData(img, 0, 0);
+  st.ms += (performance.now() - t0 - st.ms) * 0.15;
+}
+function stats() {
+  $('#stats').innerHTML = `<span class="live${st.frozen ? ' off' : ''}"></span><span class="res">${work.width}×${work.height} · </span><b>${st.frozen ? 'frozen' : st.fps + ' fps'}</b> · ${st.ms.toFixed(0)} ms`;
+}
+
+/* ---------- controls ---------- */
+function setMode(m) {
+  st.mode = m; st.dirty = true;
+  document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+  $('#formula').textContent = INFO[m][0]; $('#caption').textContent = INFO[m][1];
+}
+function setFrozen(f) {
+  st.frozen = f; $('#freezeBtn').setAttribute('aria-pressed', String(f)); $('#frozenTag').hidden = !f; stats();
+  if (!f) Core.reset();
+}
+function setMirror(m) {
+  st.mirror = m; video.classList.toggle('mirror', m);
+  const b = $('#mirrorBtn'); b.setAttribute('aria-pressed', String(m)); b.textContent = m ? 'On' : 'Off';
+  Core.reset();
+}
+function toggle(key, btn) { st[key] = !st[key]; $(btn).setAttribute('aria-pressed', String(st[key])); st.dirty = true; }
+function togglePip() { toggle('pip', '#pipBtn'); video.classList.toggle('pip', st.pip); $('#pipLabel').hidden = !st.pip; }
+function save() {
+  if (!st.running) return;
+  view.toBlob(b => {
+    if (!b) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = `veinscope_${st.mode}_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }, 'image/png');
+}
+$('#startBtn').addEventListener('click', start);
+$('#modes').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.mode); });
+$('#pipBtn').addEventListener('click', togglePip);
+$('#invertBtn').addEventListener('click', () => toggle('invert', '#invertBtn'));
+$('#freezeBtn').addEventListener('click', () => setFrozen(!st.frozen));
+$('#saveBtn').addEventListener('click', save);
+$('#mirrorBtn').addEventListener('click', () => { setMirror(!st.mirror); held = st.frozen ? held : null; });
+$('#setBtn').addEventListener('click', () => {
+  const p = $('#panel'); p.hidden = !p.hidden; $('#setBtn').setAttribute('aria-pressed', String(!p.hidden));
+});
+document.addEventListener('pointerdown', e => {
+  const p = $('#panel');
+  if (!p.hidden && !p.contains(e.target) && !$('#setBtn').contains(e.target)) { p.hidden = true; $('#setBtn').setAttribute('aria-pressed', 'false'); }
+});
+$('#camSel').addEventListener('change', e => { st.deviceId = e.target.value || null; start(); });
+function slider(id, key, fmt) {
+  const el = $('#' + id), out = $('#' + id + 'Val');
+  el.value = st[key]; out.textContent = fmt(st[key]);
+  el.addEventListener('input', () => { st[key] = parseFloat(el.value); out.textContent = fmt(st[key]); st.dirty = true; });
+}
+slider('clip', 'clip', v => v.toFixed(3));
+slider('sigma', 'sigma', v => v.toFixed(2) + ' px');
+slider('gain', 'gain', v => Math.round(v * 100) + '%');
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || /INPUT|SELECT/.test(e.target.tagName)) return;
+  const k = e.key.toLowerCase();
+  const m = { '1': 'raw', '2': 'clahe', '3': 'frangi', '4': 'boost' }[k];
+  if (m) setMode(m);
+  else if (!st.running) return;
+  else if (k === ' ') { e.preventDefault(); setFrozen(!st.frozen); }
+  else if (k === 's') save();
+  else if (k === 'i') toggle('invert', '#invertBtn');
+  else if (k === 'o') togglePip();
+});
+window.addEventListener('pagehide', stopStream);
+setMode('raw'); stats();
+// returning visitors who already granted the camera go straight to the live view
+if (navigator.permissions && navigator.permissions.query) {
+  navigator.permissions.query({ name: 'camera' }).then(p => { if (p.state === 'granted') start(); }).catch(() => {});
+}
+})();
+</script>
+</body>
+</html>
